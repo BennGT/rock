@@ -498,6 +498,7 @@ h3 {
   display: grid;
   gap: 8px;
   width: 100%;
+  border-left: 4px solid var(--accent);
   color: inherit;
   text-align: left;
 }
@@ -679,6 +680,10 @@ h3 {
   text-align: left;
 }
 
+.schedule-shift:hover {
+  background: var(--employee-soft, #ffffff);
+}
+
 .schedule-shift-head,
 .shift-card-actions {
   display: flex;
@@ -701,6 +706,26 @@ h3 {
 
 .schedule-shift strong {
   font-size: 13px;
+}
+
+.schedule-person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.schedule-person strong {
+  color: var(--ink);
+  font-size: 17px;
+  line-height: 1.15;
+}
+
+.small-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  font-size: 11px;
 }
 
 .schedule-shift span {
@@ -955,6 +980,7 @@ textarea {
 .staff-item {
   display: grid;
   gap: 12px;
+  border-left: 4px solid var(--accent);
 }
 
 .staff-actions {
@@ -979,6 +1005,8 @@ textarea {
 
 .modal {
   width: min(680px, 100%);
+  max-height: calc(100vh - 44px);
+  overflow: auto;
   display: grid;
   gap: 16px;
   padding: 18px;

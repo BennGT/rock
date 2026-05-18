@@ -37,6 +37,8 @@ const areaColors = {
   Admin: "#6b7280",
 };
 
+const employeeColorPalette = ["#276ef1", "#087f72", "#b42318", "#9a6700", "#7c3aed", "#0f766e", "#c2410c", "#be123c"];
+
 const appView = document.querySelector("#appView");
 const viewTitle = document.querySelector("#viewTitle");
 const todayLabel = document.querySelector("#todayLabel");
@@ -180,7 +182,11 @@ function bindChrome() {
     employee.name = employee.name.trim();
     employee.initials = (employee.initials || makeInitials(employee.name)).trim().toUpperCase();
     employee.role = employee.role.trim();
+    employee.email = normalizeEmail(employee.email);
     employee.phone = employee.phone.trim();
+    employee.nextOfKinName = (employee.nextOfKinName || "").trim();
+    employee.nextOfKinPhone = (employee.nextOfKinPhone || "").trim();
+    employee.color = normalizeColor(employee.color) || employeeColorPalette[state.data.employees.length % employeeColorPalette.length];
     employee.id = state.editingEmployeeId || crypto.randomUUID();
 
     const existingIndex = state.data.employees.findIndex((item) => item.id === employee.id);
@@ -297,6 +303,10 @@ function bindViewEvents() {
 
   appView.querySelectorAll("[data-employee-id]").forEach((button) => {
     button.addEventListener("click", () => openEmployeeModal(button.dataset.employeeId));
+  });
+
+  appView.querySelectorAll("[data-invite-employee-id]").forEach((button) => {
+    button.addEventListener("click", () => inviteEmployee(button.dataset.inviteEmployeeId));
   });
 
   appView.querySelectorAll("[data-request-status]").forEach((select) => {
@@ -794,11 +804,12 @@ function renderSetup() {
 
 function renderShiftItem(shift) {
   const employee = findEmployee(shift.employeeId);
+  const employeeColor = employee.color || colorForEmployee(employee.id);
   return `
-    <button class="shift-item" data-shift-id="${shift.id}" type="button">
+    <button class="shift-item" data-shift-id="${shift.id}" type="button" style="border-left-color: ${employeeColor}">
       <div class="shift-main">
         <div class="person-line">
-          <span class="avatar">${employee.initials}</span>
+          <span class="avatar" style="background: ${softColor(employeeColor)}; color: ${employeeColor}">${employee.initials}</span>
           <div>
             <strong>${employee.name}</strong>
             <span>${shift.area}</span>
@@ -817,13 +828,17 @@ function renderShiftItem(shift) {
 function renderScheduleShift(shift) {
   const employee = findEmployee(shift.employeeId);
   const className = shift.status.toLowerCase();
+  const employeeColor = employee.color || colorForEmployee(employee.id);
   return `
-    <article class="schedule-shift ${className}" style="border-left-color: ${areaColors[shift.area] || "#276ef1"}">
+    <article class="schedule-shift ${className}" style="--employee-color: ${employeeColor}; --employee-soft: ${softColor(employeeColor)}; border-left-color: ${employeeColor}">
       <div class="schedule-shift-head">
         <strong>${shift.start} to ${shift.end}</strong>
         ${statusPill(shift.status)}
       </div>
-      <span>${employee.name}</span>
+      <div class="schedule-person">
+        <span class="avatar small-avatar" style="background: ${softColor(employeeColor)}; color: ${employeeColor}">${employee.initials}</span>
+        <strong>${employee.name}</strong>
+      </div>
       <span>${shift.area}</span>
       <div class="shift-card-actions">
         <button class="ghost-button" data-shift-id="${shift.id}" type="button">Edit</button>
@@ -885,12 +900,13 @@ function renderStaffItem(employee) {
   const nextShift = state.data.shifts
     .filter((shift) => shift.employeeId === employee.id && shift.date >= toDateKey(new Date()))
     .sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`))[0];
+  const employeeColor = employee.color || colorForEmployee(employee.id);
 
   return `
-    <article class="staff-item">
+    <article class="staff-item" style="border-left-color: ${employeeColor}">
       <div class="staff-main">
         <div class="person-line">
-          <span class="avatar">${employee.initials}</span>
+          <span class="avatar" style="background: ${softColor(employeeColor)}; color: ${employeeColor}">${employee.initials}</span>
           <div>
             <strong>${employee.name}</strong>
             <span>${employee.role}</span>
@@ -899,12 +915,17 @@ function renderStaffItem(employee) {
         ${statusPill(employee.status)}
       </div>
       <div class="staff-meta">
+        <span>${employee.email || "No email saved"}</span>
         <span>${employee.phone || "No phone saved"}</span>
+      </div>
+      <div class="staff-meta">
+        <span>Next of kin: ${employee.nextOfKinName || "Not saved"}${employee.nextOfKinPhone ? `, ${employee.nextOfKinPhone}` : ""}</span>
       </div>
       <div class="staff-meta">
         <span>${nextShift ? `${formatDateShort(parseDateKey(nextShift.date))}, ${nextShift.start}` : "No upcoming shift"}</span>
       </div>
       <div class="staff-actions">
+        <button class="ghost-button" data-invite-employee-id="${employee.id}" type="button" ${employee.email ? "" : "disabled"}>Invite</button>
         <button class="ghost-button" data-employee-id="${employee.id}" type="button">Edit</button>
       </div>
     </article>
@@ -1057,7 +1078,11 @@ function openEmployeeModal(employeeId = null) {
         name: "",
         initials: "",
         role: "Team member",
+        email: "",
         phone: "",
+        nextOfKinName: "",
+        nextOfKinPhone: "",
+        color: employeeColorPalette[state.data.employees.length % employeeColorPalette.length],
         status: "Available",
       };
 
@@ -1070,6 +1095,22 @@ function openEmployeeModal(employeeId = null) {
   deleteEmployeeButton.classList.toggle("hidden", !employeeId);
   employeeModal.classList.remove("hidden");
   employeeForm.elements.name.focus();
+}
+
+function inviteEmployee(employeeId) {
+  const employee = findEmployee(employeeId);
+  if (!employee.email) {
+    syncSaveStatus("Add an email before inviting this employee", true);
+    return;
+  }
+
+  const subject = encodeURIComponent("Your Marshal app invite");
+  const body = encodeURIComponent(
+    `Hi ${employee.name},\n\nYou have been invited to use Marshal for Rock N Water Landscapes schedules and messages.\n\nOpen Marshal here:\n${window.location.origin}\n\nUse the email address this invite was sent to. If you do not have a password yet, ask your manager to create your login in Marshal under Setup > Login accounts.\n\nThanks`,
+  );
+
+  window.location.href = `mailto:${encodeURIComponent(employee.email)}?subject=${subject}&body=${body}`;
+  syncSaveStatus(`Invite email ready for ${employee.name}`);
 }
 
 function closeEmployeeModal() {
@@ -1677,6 +1718,11 @@ function normalizeData(data) {
     ...employee,
     initials: employee.initials || makeInitials(employee.name),
     status: employee.status || "Available",
+    email: normalizeEmail(employee.email),
+    phone: employee.phone || "",
+    nextOfKinName: employee.nextOfKinName || "",
+    nextOfKinPhone: employee.nextOfKinPhone || "",
+    color: normalizeColor(employee.color) || colorForEmployee(employee.id),
   }));
 
   if (!merged.channels.some((channel) => channel.id === merged.activeChannel)) {
@@ -1740,10 +1786,41 @@ function findEmployee(employeeId) {
       name: "Unassigned",
       initials: "--",
       role: "",
+      email: "",
       phone: "",
+      nextOfKinName: "",
+      nextOfKinPhone: "",
+      color: "#6b7280",
       status: "Unavailable",
     }
   );
+}
+
+function colorForEmployee(employeeId) {
+  const value = String(employeeId || "");
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % employeeColorPalette.length;
+  }
+  return employeeColorPalette[hash] || employeeColorPalette[0];
+}
+
+function softColor(color) {
+  const hex = normalizeColor(color);
+  if (!hex) return "#eaf1ff";
+  const red = parseInt(hex.slice(1, 3), 16);
+  const green = parseInt(hex.slice(3, 5), 16);
+  const blue = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${red}, ${green}, ${blue}, 0.12)`;
+}
+
+function normalizeColor(color) {
+  const value = String(color || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : "";
+}
+
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
 }
 
 function shiftsForDate(dateKey) {
