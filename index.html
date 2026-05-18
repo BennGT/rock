@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101820" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Marshal" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <title>Marshal</title>
+    <link rel="icon" type="image/png" href="assets/rnw-logo.png" />
+    <link rel="apple-touch-icon" href="assets/marshal-icon-192.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="auth-screen" id="authScreen">
+      <div class="auth-card">
+        <div class="auth-logo" aria-hidden="true">
+          <img src="assets/rnw-logo.png" alt="" />
+        </div>
+        <p class="eyebrow">Marshal</p>
+        <h1 id="authTitle">Sign in</h1>
+        <p class="auth-copy" id="authIntro">Use your Marshal email and password.</p>
+        <form class="form-stack" id="authForm">
+          <label class="auth-name-field hidden" id="authNameField">
+            Name
+            <input name="name" type="text" autocomplete="name" />
+          </label>
+          <label>
+            Email
+            <input name="email" type="email" autocomplete="email" required />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" autocomplete="current-password" required minlength="8" />
+          </label>
+          <div class="auth-error" id="authError" role="alert"></div>
+          <button class="primary-button" type="submit" id="authSubmitButton">Sign in</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main">
+        <div class="brand">
+          <div class="brand-mark" aria-hidden="true">
+            <img id="brandLogo" src="assets/rnw-logo.png" alt="" />
+            <span id="brandFallback">M</span>
+          </div>
+          <div>
+            <strong id="brandName">Marshal</strong>
+            <span id="brandSubtitle">Rock N Water Landscapes</span>
+          </div>
+        </div>
+
+        <nav class="nav-tabs" id="navTabs" aria-label="Workspace views">
+          <button class="nav-tab active" data-view="dashboard" type="button">
+            <span class="nav-icon" aria-hidden="true">01</span>
+            Today
+          </button>
+          <button class="nav-tab" data-view="schedule" type="button">
+            <span class="nav-icon" aria-hidden="true">02</span>
+            Schedule
+          </button>
+          <button class="nav-tab" data-view="messages" type="button">
+            <span class="nav-icon" aria-hidden="true">03</span>
+            Messages
+          </button>
+          <button class="nav-tab" data-view="staff" type="button">
+            <span class="nav-icon" aria-hidden="true">04</span>
+            Staff
+          </button>
+          <button class="nav-tab" data-view="setup" type="button">
+            <span class="nav-icon" aria-hidden="true">05</span>
+            Setup
+          </button>
+        </nav>
+
+        <div class="user-switcher">
+          <label for="userSelect">Employee view</label>
+          <select id="userSelect"></select>
+        </div>
+      </aside>
+
+      <main class="main-panel">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="todayLabel"></p>
+            <h1 id="viewTitle">Today</h1>
+          </div>
+          <div class="topbar-actions">
+            <div class="save-status" id="saveStatus" role="status" aria-live="polite">Saved locally</div>
+            <div class="account-pill" id="accountStatus">Signed out</div>
+            <button class="ghost-button" id="signOutButton" type="button">Sign out</button>
+            <button class="ghost-button" id="installAppButton" type="button">Install app</button>
+            <button class="ghost-button" id="notificationButton" type="button">Enable notifications</button>
+            <button class="ghost-button" id="seedReset" type="button">Clear data</button>
+          </div>
+        </header>
+
+        <section id="appView" class="view-region" aria-live="polite"></section>
+      </main>
+    </div>
+
+    <div class="modal-backdrop hidden" id="shiftModal" role="dialog" aria-modal="true" aria-labelledby="shiftModalTitle">
+      <form class="modal" id="shiftForm">
+        <div class="modal-head">
+          <h2 id="shiftModalTitle">New shift</h2>
+          <button class="icon-button" type="button" id="closeShiftModal" aria-label="Close">x</button>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Employee
+            <select name="employeeId" required></select>
+          </label>
+          <label>
+            Date
+            <input name="date" type="date" required />
+          </label>
+          <label>
+            Start
+            <input name="start" type="time" required />
+          </label>
+          <label>
+            End
+            <input name="end" type="time" required />
+          </label>
+          <label>
+            Area
+            <select name="area" required></select>
+          </label>
+          <label>
+            Status
+            <select name="status" required>
+              <option value="Confirmed">Confirmed</option>
+              <option value="Draft">Draft</option>
+              <option value="Open">Open</option>
+            </select>
+          </label>
+        </div>
+
+        <label class="full-field">
+          Notes
+          <textarea name="notes" rows="3" placeholder="Breaks, handover notes, or requirements"></textarea>
+        </label>
+
+        <div class="modal-actions">
+          <button class="ghost-button" type="button" id="deleteShiftButton">Delete</button>
+          <button class="primary-button" type="submit">Save shift</button>
+        </div>
+      </form>
+    </div>
+
+    <div class="modal-backdrop hidden" id="employeeModal" role="dialog" aria-modal="true" aria-labelledby="employeeModalTitle">
+      <form class="modal" id="employeeForm">
+        <div class="modal-head">
+          <h2 id="employeeModalTitle">New employee</h2>
+          <button class="icon-button" type="button" id="closeEmployeeModal" aria-label="Close">x</button>
+        </div>
+
+        <div class="form-grid">
+          <label>
+            Name
+            <input name="name" type="text" required />
+          </label>
+          <label>
+            Initials
+            <input name="initials" type="text" maxlength="3" required />
+          </label>
+          <label>
+            Role
+            <input name="role" type="text" required />
+          </label>
+          <label>
+            Phone
+            <input name="phone" type="tel" />
+          </label>
+          <label>
+            Status
+            <select name="status" required>
+              <option value="Available">Available</option>
+              <option value="On leave">On leave</option>
+              <option value="Unavailable">Unavailable</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button class="danger-button" type="button" id="deleteEmployeeButton">Delete</button>
+          <button class="primary-button" type="submit">Save employee</button>
+        </div>
+      </form>
+    </div>
+
+    <input class="hidden-file" id="backupFileInput" type="file" accept="application/json" />
+
+    <script src="app.js"></script>
+  </body>
+</html>

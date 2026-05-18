@@ -1,0 +1,9 @@
+{
+  "name": "marshal",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Marshal workforce scheduling app",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.0"
+  }
+}
