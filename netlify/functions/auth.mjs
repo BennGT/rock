@@ -49,7 +49,15 @@ export default async function handler(request) {
     }
 
     const currentUser = await getAuthenticatedUser(store, request.headers.get("authorization"));
-    if (!currentUser || currentUser.role !== "admin") {
+    if (!currentUser) {
+      return json(403, { error: "Sign in required" });
+    }
+
+    if (action === "change-password") {
+      return changePassword(store, body, currentUser);
+    }
+
+    if (currentUser.role !== "admin") {
       return json(403, { error: "Admin access required" });
     }
 
@@ -59,6 +67,10 @@ export default async function handler(request) {
 
     if (action === "delete-user") {
       return deleteUser(store, body, currentUser);
+    }
+
+    if (action === "reset-password") {
+      return resetPassword(store, body);
     }
 
     return json(400, { error: "Unknown action" });
@@ -140,6 +152,30 @@ async function deleteUser(store, body, currentUser) {
   const remainingUsers = users.filter((user) => user.id !== userId);
   await setUsers(store, remainingUsers);
   return json(200, { users: publicUsers(remainingUsers) });
+}
+
+async function changePassword(store, body, currentUser) {
+  const users = await getUsers(store);
+  const user = users.find((item) => item.id === currentUser.id);
+  if (!user) return json(404, { error: "User not found" });
+
+  if (!verifyPassword(body.currentPassword || "", user.password)) {
+    return json(401, { error: "Current password is incorrect" });
+  }
+
+  user.password = hashPassword(assertPassword(body.newPassword));
+  await setUsers(store, users);
+  return json(200, { ok: true });
+}
+
+async function resetPassword(store, body) {
+  const users = await getUsers(store);
+  const user = users.find((item) => item.id === body.userId);
+  if (!user) return json(404, { error: "User not found" });
+
+  user.password = hashPassword(assertPassword(body.newPassword));
+  await setUsers(store, users);
+  return json(200, { users: publicUsers(users) });
 }
 
 async function createSession(store, userId) {

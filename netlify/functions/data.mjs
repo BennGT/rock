@@ -32,8 +32,11 @@ export default async function handler(request) {
         return json(400, { error: "Invalid data payload" });
       }
 
+      const currentData = (await store.get("shared-data", { type: "json" })) || {};
+      const nextData = user.role === "admin" ? data : mergeEmployeeData(currentData, data, user);
+
       await store.setJSON("shared-data", {
-        ...data,
+        ...nextData,
         cloudSavedAt: new Date().toISOString(),
       });
 
@@ -49,6 +52,47 @@ export default async function handler(request) {
       name: error.name,
     });
   }
+}
+
+function mergeEmployeeData(currentData, incomingData, user) {
+  const employeeId = findEmployeeIdForUser(currentData, user);
+  if (!employeeId) return currentData;
+
+  const currentMessages = Array.isArray(currentData.messages) ? currentData.messages : [];
+  const incomingMessages = Array.isArray(incomingData.messages) ? incomingData.messages : [];
+  const currentMessageIds = new Set(currentMessages.map((message) => message.id));
+  const newOwnMessages = incomingMessages.filter(
+    (message) => message.employeeId === employeeId && message.id && !currentMessageIds.has(message.id),
+  );
+
+  const currentRequests = Array.isArray(currentData.requests) ? currentData.requests : [];
+  const incomingRequests = Array.isArray(incomingData.requests) ? incomingData.requests : [];
+  const otherRequests = currentRequests.filter((request) => request.employeeId !== employeeId);
+  const ownRequests = incomingRequests
+    .filter((request) => request.employeeId === employeeId && request.id)
+    .map((request) => {
+      const existing = currentRequests.find((item) => item.id === request.id);
+      return {
+        ...request,
+        status: existing?.status || request.status || "Pending",
+      };
+    });
+
+  return {
+    ...currentData,
+    messages: [...currentMessages, ...newOwnMessages],
+    requests: [...ownRequests, ...otherRequests],
+    savedAt: incomingData.savedAt || currentData.savedAt,
+  };
+}
+
+function findEmployeeIdForUser(data, user) {
+  const employees = Array.isArray(data.employees) ? data.employees : [];
+  return employees.find((employee) => normalizeEmail(employee.email) === normalizeEmail(user.email))?.id || null;
+}
+
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
 }
 
 function getMarshalStore(name) {

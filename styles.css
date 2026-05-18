@@ -541,7 +541,8 @@ h3 {
 }
 
 .pill.draft,
-.pill.pending {
+.pill.pending,
+.pill.unpublished {
   background: var(--amber-soft);
   color: var(--amber);
 }
@@ -788,6 +789,10 @@ h3 {
   grid-template-columns: minmax(150px, 0.7fr) minmax(190px, 1fr) minmax(150px, 0.7fr) minmax(120px, 0.4fr) auto;
 }
 
+.password-form {
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 1fr) auto;
+}
+
 .config-list,
 .section-gap {
   display: grid;
@@ -822,6 +827,10 @@ h3 {
 
 .channel-row {
   grid-template-columns: minmax(160px, 0.6fr) minmax(220px, 1fr) auto;
+}
+
+.account-row {
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, 0.9fr) auto;
 }
 
 .row-actions {
@@ -861,6 +870,20 @@ label {
   color: var(--muted);
   font-size: 12px;
   font-weight: 800;
+}
+
+.check-field {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-top: 22px;
+}
+
+.check-field input {
+  width: 18px;
+  min-height: 18px;
+  padding: 0;
 }
 
 input,
@@ -1121,7 +1144,9 @@ textarea {
   .staff-list,
   .form-grid,
   .inline-form,
+  .password-form,
   .channel-row,
+  .account-row,
   .config-row,
   .message-compose {
     grid-template-columns: 1fr;

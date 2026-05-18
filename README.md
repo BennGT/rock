@@ -18,12 +18,17 @@ Open `index.html` in a browser to run it locally. When hosted on Netlify with Fu
 - Browser notifications for saved shifts, staff updates, messages, and requests on the current device.
 - Shared Netlify cloud data storage so PC and phone edits can sync through the hosted site.
 - Email and password sign-in with a first-run owner account and admin-created employee accounts.
+- Admin and employee permissions, with employees limited to their published shifts, messages, and own requests.
+- Published schedule workflow so draft roster changes stay hidden until an admin publishes them.
+- Password change and admin password reset.
+- Email invite actions that open a ready-to-send invite in your email app.
+- Optional Web Push notification support through Netlify Functions.
 
 ## Phone install and notifications
 
 Marshal can be installed on phones once it is served over `https://` or from `localhost` during testing. Use the **Install app** button where supported, or use the browser menu to add it to the home screen.
 
-The current notification support is local to the device that has Marshal open and has granted notification permission. Sending schedule and message push notifications to all employee phones requires a hosted shared backend with web push subscriptions.
+Marshal supports local browser notifications immediately after a device grants permission. It also includes optional Web Push support for phone alerts after the Netlify environment variables below are configured.
 
 ## Netlify hosting
 
@@ -44,6 +49,12 @@ Required environment variables for shared saving and sign-in:
 - `MARSHAL_NETLIFY_SITE_ID`: your Netlify Project ID from **Project configuration > General > Project information**.
 - `MARSHAL_NETLIFY_TOKEN`: a Netlify personal access token from **User settings > Applications > Personal access tokens**.
 
+Optional environment variables for phone push notifications:
+
+- `MARSHAL_VAPID_PUBLIC_KEY`: public key from `npx web-push generate-vapid-keys`.
+- `MARSHAL_VAPID_PRIVATE_KEY`: private key from the same command.
+- `MARSHAL_VAPID_SUBJECT`: contact email in this format: `mailto:you@example.com`.
+
 After adding or changing environment variables, trigger a fresh deploy. If the sign-in page still reports a service error, open `https://your-site-name.netlify.app/.netlify/functions/auth` and check the JSON error detail.
 
 Static upload option:
@@ -54,7 +65,9 @@ Manual folder upload can show the app, but shared PC-to-phone saving may not wor
 
 On the first hosted visit, Marshal asks you to create the owner account. After that, everyone must sign in with email and password.
 
-The owner/admin can create employee login accounts from **Setup > Login accounts**. Passwords are hashed in the Netlify Function before being stored. The sign-in and shared data Functions use Netlify's newer `.mjs` Function format so Netlify Blobs is available in production.
+The owner/admin can create employee login accounts from **Setup > Login accounts**. Passwords are hashed in the Netlify Function before being stored. Staff can change their own password from **Setup > Password**, and admins can reset passwords from **Setup > Login accounts**.
+
+Use the same email address for the employee's login account and their Staff profile. That link lets Marshal show employees only their published shifts and their own requests.
 
 ## Good next steps
 

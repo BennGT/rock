@@ -3,6 +3,7 @@ const authTokenKey = "marshal-auth-token";
 const legacyStorageKeys = ["shiftlink-demo-v1"];
 const cloudApiPath = "/.netlify/functions/data";
 const authApiPath = "/.netlify/functions/auth";
+const pushApiPath = "/.netlify/functions/push";
 
 const state = {
   view: "dashboard",
@@ -13,6 +14,7 @@ const state = {
   deferredInstallPrompt: null,
   cloudStatus: "local",
   cloudSaveTimer: null,
+  pushPublicKey: null,
   localChangedDuringCloudLoad: false,
   authToken: localStorage.getItem(authTokenKey),
   authUser: null,
@@ -136,6 +138,11 @@ function bindChrome() {
 
   shiftForm.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!isAdmin()) {
+      syncSaveStatus("Only admins can edit schedules", true);
+      closeShiftModal();
+      return;
+    }
     if (!state.data.employees.length) {
       syncSaveStatus("Add an employee before creating shifts", true);
       return;
@@ -144,6 +151,7 @@ function bindChrome() {
     const formData = new FormData(shiftForm);
     const shift = Object.fromEntries(formData.entries());
     shift.id = state.editingShiftId || crypto.randomUUID();
+    shift.published = formData.get("published") === "on";
     const isNew = !state.editingShiftId;
 
     const existingIndex = state.data.shifts.findIndex((item) => item.id === shift.id);
@@ -154,13 +162,22 @@ function bindChrome() {
     }
 
     saveData();
-    notifyTeam(isNew ? "New shift saved" : "Shift updated", `${findEmployee(shift.employeeId).name}: ${formatDateShort(parseDateKey(shift.date))}, ${shift.start} to ${shift.end}`);
+    notifyTeam(
+      isNew ? "New shift saved" : "Shift updated",
+      `${findEmployee(shift.employeeId).name}: ${formatDateShort(parseDateKey(shift.date))}, ${shift.start} to ${shift.end}`,
+      false,
+      shift.published,
+    );
     closeShiftModal();
     render();
   });
 
   deleteShiftButton.addEventListener("click", () => {
     if (!state.editingShiftId) return;
+    if (!isAdmin()) {
+      syncSaveStatus("Only admins can delete shifts", true);
+      return;
+    }
     const shift = state.data.shifts.find((item) => item.id === state.editingShiftId);
     state.data.shifts = state.data.shifts.filter((shift) => shift.id !== state.editingShiftId);
     saveData();
@@ -176,6 +193,11 @@ function bindChrome() {
 
   employeeForm.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (!isAdmin()) {
+      syncSaveStatus("Only admins can edit employees", true);
+      closeEmployeeModal();
+      return;
+    }
     const formData = new FormData(employeeForm);
     const employee = Object.fromEntries(formData.entries());
     const isNew = !state.editingEmployeeId;
@@ -206,6 +228,10 @@ function bindChrome() {
 
   deleteEmployeeButton.addEventListener("click", () => {
     if (!state.editingEmployeeId) return;
+    if (!isAdmin()) {
+      syncSaveStatus("Only admins can delete employees", true);
+      return;
+    }
     const employee = findEmployee(state.editingEmployeeId);
     if (typeof confirm === "function" && !confirm(`Delete ${employee.name}? Their shifts, messages, and requests will also be removed.`)) return;
     state.data.employees = state.data.employees.filter((item) => item.id !== state.editingEmployeeId);
@@ -243,6 +269,10 @@ function render() {
 function bindViewEvents() {
   appView.querySelectorAll("[data-action='new-shift']").forEach((button) => {
     button.addEventListener("click", () => openShiftModal());
+  });
+
+  appView.querySelectorAll("[data-action='publish-week']").forEach((button) => {
+    button.addEventListener("click", publishCurrentWeek);
   });
 
   appView.querySelectorAll("[data-shift-id]").forEach((button) => {
@@ -301,6 +331,19 @@ function bindViewEvents() {
     button.addEventListener("click", () => deleteAccount(button.dataset.deleteAccountId));
   });
 
+  appView.querySelectorAll("[data-invite-account-id]").forEach((button) => {
+    button.addEventListener("click", () => inviteAccount(button.dataset.inviteAccountId));
+  });
+
+  appView.querySelectorAll("[data-reset-password-form]").forEach((form) => {
+    form.addEventListener("submit", resetAccountPassword);
+  });
+
+  const passwordForm = appView.querySelector("#passwordForm");
+  if (passwordForm) {
+    passwordForm.addEventListener("submit", changeOwnPassword);
+  }
+
   appView.querySelectorAll("[data-employee-id]").forEach((button) => {
     button.addEventListener("click", () => openEmployeeModal(button.dataset.employeeId));
   });
@@ -311,6 +354,10 @@ function bindViewEvents() {
 
   appView.querySelectorAll("[data-request-status]").forEach((select) => {
     select.addEventListener("change", () => {
+      if (!isAdmin()) {
+        syncSaveStatus("Only admins can update requests", true);
+        return;
+      }
       const request = state.data.requests.find((item) => item.id === select.dataset.requestStatus);
       if (!request) return;
       request.status = select.value;
@@ -367,7 +414,7 @@ function bindViewEvents() {
       });
       input.value = "";
       saveData();
-      notifyTeam(`New message in ${getActiveChannel().name}`, text);
+      notifyTeam(`New message in ${getActiveChannel().name}`, text, false, isAdmin());
       render();
     });
   }
@@ -544,6 +591,7 @@ function renderSchedule() {
   const days = Array.from({ length: 7 }, (_, index) => addDays(state.weekStart, index));
   const rangeLabel = `${formatDateShort(days[0])} to ${formatDateShort(days[6])}`;
   const copiedEmployee = state.copiedShift ? findEmployee(state.copiedShift.employeeId) : null;
+  const unpublishedCount = weekShifts().filter((shift) => !shift.published).length;
 
   return `
     <div class="schedule-layout">
@@ -553,14 +601,26 @@ function renderSchedule() {
           <button data-week="0" class="active" type="button">${rangeLabel}</button>
           <button data-week="1" type="button">Next</button>
         </div>
-        <button class="primary-button" data-action="new-shift" type="button">New shift</button>
+        ${
+          isAdmin()
+            ? `<div class="toolbar">
+                <button class="ghost-button" data-action="publish-week" type="button" ${unpublishedCount ? "" : "disabled"}>Publish week</button>
+                <button class="primary-button" data-action="new-shift" type="button">New shift</button>
+              </div>`
+            : ""
+        }
       </div>
 
       ${
-        state.copiedShift
+        state.copiedShift && isAdmin()
           ? `<div class="copy-banner">
               Copied ${copiedEmployee.name}, ${state.copiedShift.start} to ${state.copiedShift.end}. Choose Paste on a day.
             </div>`
+          : ""
+      }
+      ${
+        isAdmin() && unpublishedCount
+          ? `<div class="copy-banner">${unpublishedCount} shift${unpublishedCount === 1 ? "" : "s"} not yet published to employees.</div>`
           : ""
       }
 
@@ -576,7 +636,7 @@ function renderSchedule() {
                     <strong>${formatWeekday(day)}</strong>
                     <span>${formatDateShort(day)}</span>
                   </div>
-                  ${state.copiedShift ? `<button class="mini-button" data-paste-shift-date="${key}" type="button">Paste</button>` : ""}
+                  ${state.copiedShift && isAdmin() ? `<button class="mini-button" data-paste-shift-date="${key}" type="button">Paste</button>` : ""}
                 </div>
                 <div class="day-shifts">
                   ${
@@ -631,6 +691,10 @@ function renderMessages() {
 }
 
 function renderStaff() {
+  const requests = isAdmin()
+    ? state.data.requests
+    : state.data.requests.filter((request) => request.employeeId === state.data.currentUserId);
+
   return `
     <div class="staff-layout">
       <section class="panel">
@@ -661,7 +725,7 @@ function renderStaff() {
             <button class="primary-button" type="submit">Submit request</button>
           </form>
           <div class="section-gap request-list">
-            ${state.data.requests.length ? state.data.requests.map((request) => renderRequestItem(request, true)).join("") : `<div class="empty-state">No staff requests yet.</div>`}
+            ${requests.length ? requests.map((request) => renderRequestItem(request, isAdmin())).join("") : `<div class="empty-state">No staff requests yet.</div>`}
           </div>
         </div>
       </section>
@@ -672,7 +736,7 @@ function renderStaff() {
             <h2 class="panel-title">Team directory</h2>
             <p class="panel-subtitle">${state.data.employees.length} employees</p>
           </div>
-          <button class="ghost-button" data-action="new-employee" type="button">Add employee</button>
+          ${isAdmin() ? `<button class="ghost-button" data-action="new-employee" type="button">Add employee</button>` : ""}
         </div>
         <div class="panel-body staff-list">
           ${state.data.employees.length ? state.data.employees.map(renderStaffItem).join("") : `<div class="empty-state">No employees yet. Add your first employee to start building the roster.</div>`}
@@ -683,8 +747,18 @@ function renderStaff() {
 }
 
 function renderSetup() {
+  if (!isAdmin()) {
+    return `
+      <div class="setup-layout">
+        ${renderPasswordPanel()}
+        ${renderPhoneAlertsPanel()}
+      </div>
+    `;
+  }
+
   return `
     <div class="setup-layout">
+      ${renderPasswordPanel()}
       <section class="panel">
         <div class="panel-head">
           <div>
@@ -757,19 +831,7 @@ function renderSetup() {
         </div>
       </section>
 
-      <section class="panel wide-panel">
-        <div class="panel-head">
-          <div>
-            <h2 class="panel-title">Phone app and alerts</h2>
-            <p class="panel-subtitle">Install Marshal on a phone and enable browser notifications</p>
-          </div>
-        </div>
-        <div class="panel-body backup-actions">
-          <button class="primary-button" data-action="install-app" type="button">Install app</button>
-          <button class="ghost-button" data-action="enable-notifications" type="button">Enable notifications</button>
-          <button class="ghost-button" data-action="test-notification" type="button">Send test</button>
-        </div>
-      </section>
+      ${renderPhoneAlertsPanel()}
 
       ${
         state.authUser?.role === "admin"
@@ -799,6 +861,44 @@ function renderSetup() {
           : ""
       }
     </div>
+  `;
+}
+
+function renderPasswordPanel() {
+  return `
+    <section class="panel wide-panel">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title">Password</h2>
+          <p class="panel-subtitle">Change your Marshal sign-in password</p>
+        </div>
+      </div>
+      <div class="panel-body">
+        <form class="inline-form password-form" id="passwordForm">
+          <input name="currentPassword" type="password" placeholder="Current password" aria-label="Current password" required />
+          <input name="newPassword" type="password" placeholder="New password" aria-label="New password" minlength="8" required />
+          <button class="primary-button" type="submit">Change password</button>
+        </form>
+      </div>
+    </section>
+  `;
+}
+
+function renderPhoneAlertsPanel() {
+  return `
+    <section class="panel wide-panel">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title">Phone app and alerts</h2>
+          <p class="panel-subtitle">Install Marshal on a phone and enable browser notifications</p>
+        </div>
+      </div>
+      <div class="panel-body backup-actions">
+        <button class="primary-button" data-action="install-app" type="button">Install app</button>
+        <button class="ghost-button" data-action="enable-notifications" type="button">Enable notifications</button>
+        <button class="ghost-button" data-action="test-notification" type="button">Send test</button>
+      </div>
+    </section>
   `;
 }
 
@@ -833,17 +933,21 @@ function renderScheduleShift(shift) {
     <article class="schedule-shift ${className}" style="--employee-color: ${employeeColor}; --employee-soft: ${softColor(employeeColor)}; border-left-color: ${employeeColor}">
       <div class="schedule-shift-head">
         <strong>${shift.start} to ${shift.end}</strong>
-        ${statusPill(shift.status)}
+        ${shift.published ? statusPill(shift.status) : statusPill("Unpublished")}
       </div>
       <div class="schedule-person">
         <span class="avatar small-avatar" style="background: ${softColor(employeeColor)}; color: ${employeeColor}">${employee.initials}</span>
         <strong>${employee.name}</strong>
       </div>
       <span>${shift.area}</span>
-      <div class="shift-card-actions">
-        <button class="ghost-button" data-shift-id="${shift.id}" type="button">Edit</button>
-        <button class="ghost-button" data-copy-shift-id="${shift.id}" type="button">Copy</button>
-      </div>
+      ${
+        isAdmin()
+          ? `<div class="shift-card-actions">
+              <button class="ghost-button" data-shift-id="${shift.id}" type="button">Edit</button>
+              <button class="ghost-button" data-copy-shift-id="${shift.id}" type="button">Copy</button>
+            </div>`
+          : ""
+      }
     </article>
   `;
 }
@@ -901,6 +1005,7 @@ function renderStaffItem(employee) {
     .filter((shift) => shift.employeeId === employee.id && shift.date >= toDateKey(new Date()))
     .sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`))[0];
   const employeeColor = employee.color || colorForEmployee(employee.id);
+  const canSeeEmergency = isAdmin() || employee.id === state.data.currentUserId;
 
   return `
     <article class="staff-item" style="border-left-color: ${employeeColor}">
@@ -918,16 +1023,20 @@ function renderStaffItem(employee) {
         <span>${employee.email || "No email saved"}</span>
         <span>${employee.phone || "No phone saved"}</span>
       </div>
-      <div class="staff-meta">
+      ${canSeeEmergency ? `<div class="staff-meta">
         <span>Next of kin: ${employee.nextOfKinName || "Not saved"}${employee.nextOfKinPhone ? `, ${employee.nextOfKinPhone}` : ""}</span>
-      </div>
+      </div>` : ""}
       <div class="staff-meta">
         <span>${nextShift ? `${formatDateShort(parseDateKey(nextShift.date))}, ${nextShift.start}` : "No upcoming shift"}</span>
       </div>
-      <div class="staff-actions">
-        <button class="ghost-button" data-invite-employee-id="${employee.id}" type="button" ${employee.email ? "" : "disabled"}>Invite</button>
-        <button class="ghost-button" data-employee-id="${employee.id}" type="button">Edit</button>
-      </div>
+      ${
+        isAdmin()
+          ? `<div class="staff-actions">
+              <button class="ghost-button" data-invite-employee-id="${employee.id}" type="button" ${employee.email ? "" : "disabled"}>Invite</button>
+              <button class="ghost-button" data-employee-id="${employee.id}" type="button">Edit</button>
+            </div>`
+          : ""
+      }
     </article>
   `;
 }
@@ -972,7 +1081,14 @@ function renderAccountRow(user) {
         <strong>${escapeHtml(user.name)}</strong>
         <span>${escapeHtml(user.email)} - ${user.role}</span>
       </div>
-      <button class="ghost-button" data-delete-account-id="${user.id}" type="button" ${user.id === state.authUser?.id ? "disabled" : ""}>Remove</button>
+      <form class="row-actions reset-password-form" data-reset-password-form="${user.id}">
+        <input name="newPassword" type="password" placeholder="New password" aria-label="New password for ${escapeHtml(user.name)}" minlength="8" required />
+        <button class="ghost-button" type="submit">Reset</button>
+      </form>
+      <div class="row-actions">
+        <button class="ghost-button" data-invite-account-id="${user.id}" type="button">Invite</button>
+        <button class="ghost-button" data-delete-account-id="${user.id}" type="button" ${user.id === state.authUser?.id ? "disabled" : ""}>Remove</button>
+      </div>
     </div>
   `;
 }
@@ -993,6 +1109,11 @@ function statusPill(status) {
 }
 
 function openShiftModal(shiftId = null) {
+  if (!isAdmin()) {
+    syncSaveStatus("Only admins can edit schedules", true);
+    return;
+  }
+
   if (!state.data.employees.length) {
     state.view = "staff";
     syncSaveStatus("Add an employee before creating shifts", true);
@@ -1010,6 +1131,7 @@ function openShiftModal(shiftId = null) {
         end: "17:00",
         area: state.data.areas[0],
         status: "Confirmed",
+        published: false,
         notes: "",
       };
 
@@ -1022,7 +1144,12 @@ function openShiftModal(shiftId = null) {
     .join("");
 
   Object.entries(shift).forEach(([key, value]) => {
-    if (shiftForm.elements[key]) shiftForm.elements[key].value = value;
+    if (!shiftForm.elements[key]) return;
+    if (shiftForm.elements[key].type === "checkbox") {
+      shiftForm.elements[key].checked = Boolean(value);
+      return;
+    }
+    shiftForm.elements[key].value = value;
   });
 
   deleteShiftButton.classList.toggle("hidden", !shiftId);
@@ -1037,6 +1164,11 @@ function closeShiftModal() {
 }
 
 function copyShift(shiftId) {
+  if (!isAdmin()) {
+    syncSaveStatus("Only admins can copy shifts", true);
+    return;
+  }
+
   const shift = state.data.shifts.find((item) => item.id === shiftId);
   if (!shift) return;
 
@@ -1046,6 +1178,7 @@ function copyShift(shiftId) {
     end: shift.end,
     area: shift.area,
     status: shift.status,
+    published: false,
     notes: shift.notes || "",
   };
 
@@ -1055,6 +1188,11 @@ function copyShift(shiftId) {
 }
 
 function pasteShift(date) {
+  if (!isAdmin()) {
+    syncSaveStatus("Only admins can paste shifts", true);
+    return;
+  }
+
   if (!state.copiedShift) return;
 
   const pastedShift = {
@@ -1070,7 +1208,32 @@ function pasteShift(date) {
   render();
 }
 
+function publishCurrentWeek() {
+  if (!isAdmin()) {
+    syncSaveStatus("Only admins can publish schedules", true);
+    return;
+  }
+
+  const shifts = weekShifts().filter((shift) => !shift.published);
+  if (!shifts.length) return;
+
+  shifts.forEach((shift) => {
+    shift.published = true;
+    if (shift.status === "Draft") shift.status = "Confirmed";
+  });
+
+  saveData();
+  notifyTeam("Schedule published", `${formatDateShort(state.weekStart)} to ${formatDateShort(addDays(state.weekStart, 6))}`, false, true);
+  syncSaveStatus("Week published to employees");
+  render();
+}
+
 function openEmployeeModal(employeeId = null) {
+  if (!isAdmin()) {
+    syncSaveStatus("Only admins can edit employees", true);
+    return;
+  }
+
   state.editingEmployeeId = employeeId;
   const employee = employeeId
     ? findEmployee(employeeId)
@@ -1299,6 +1462,64 @@ async function deleteAccount(userId) {
   }
 }
 
+async function changeOwnPassword(event) {
+  event.preventDefault();
+  const formData = new FormData(event.currentTarget);
+
+  try {
+    await authRequest(
+      {
+        action: "change-password",
+        currentPassword: formData.get("currentPassword"),
+        newPassword: formData.get("newPassword"),
+      },
+      "POST",
+    );
+
+    event.currentTarget.reset();
+    syncSaveStatus("Password changed");
+  } catch (error) {
+    syncSaveStatus(error.message || "Could not change password", true);
+  }
+}
+
+async function resetAccountPassword(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+
+  try {
+    const payload = await authRequest(
+      {
+        action: "reset-password",
+        userId: form.dataset.resetPasswordForm,
+        newPassword: formData.get("newPassword"),
+      },
+      "POST",
+    );
+
+    state.authUsers = payload.users || [];
+    form.reset();
+    syncSaveStatus("Password reset");
+    render();
+  } catch (error) {
+    syncSaveStatus(error.message || "Could not reset password", true);
+  }
+}
+
+function inviteAccount(userId) {
+  const user = state.authUsers.find((item) => item.id === userId);
+  if (!user) return;
+
+  const subject = encodeURIComponent("Your Marshal app invite");
+  const body = encodeURIComponent(
+    `Hi ${user.name},\n\nYou have been invited to use Marshal for Rock N Water Landscapes schedules and messages.\n\nOpen Marshal here:\n${window.location.origin}\n\nSign in with this email address: ${user.email}\n\nYour manager will give you your temporary password separately. After you sign in, go to Setup > Password to change it.\n\nThanks`,
+  );
+
+  window.location.href = `mailto:${encodeURIComponent(user.email)}?subject=${subject}&body=${body}`;
+  syncSaveStatus(`Invite email ready for ${user.name}`);
+}
+
 async function authRequest(body = null, method = "POST") {
   const options = {
     method,
@@ -1432,13 +1653,16 @@ async function requestNotifications() {
   syncNotificationButton();
 
   if (permission === "granted") {
+    await registerPushSubscription();
     notifyTeam("Marshal notifications enabled", "This device can receive Marshal alerts.", true);
   } else {
     syncSaveStatus("Notifications not enabled");
   }
 }
 
-function notifyTeam(title, body, force = false) {
+function notifyTeam(title, body, force = false, sendPush = false) {
+  if (sendPush) sendPushAlert(title, body);
+
   if (!force && !state.data.notificationsEnabled) return;
   if (!supportsNotifications() || window.Notification.permission !== "granted") {
     syncNotificationButton();
@@ -1462,6 +1686,73 @@ function notifyTeam(title, body, force = false) {
   new window.Notification(title, options);
 }
 
+async function registerPushSubscription() {
+  if (!state.authToken || typeof navigator === "undefined" || !("serviceWorker" in navigator) || !("PushManager" in window)) return;
+
+  try {
+    const response = await fetch(pushApiPath, {
+      method: "GET",
+      cache: "no-store",
+      headers: authHeaders({ Accept: "application/json" }),
+    });
+    if (!response.ok) return;
+
+    const payload = await response.json();
+    state.pushPublicKey = payload.publicKey || null;
+    if (!payload.enabled || !state.pushPublicKey) {
+      syncSaveStatus("Local notifications on. Phone push needs VAPID keys in Netlify.");
+      return;
+    }
+
+    const registration = await navigator.serviceWorker.ready;
+    const existing = await registration.pushManager.getSubscription();
+    const subscription =
+      existing ||
+      (await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(state.pushPublicKey),
+      }));
+
+    await fetch(pushApiPath, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        action: "subscribe",
+        employeeId: state.data.currentUserId,
+        subscription,
+      }),
+    });
+  } catch (error) {
+    console.error(error);
+    syncSaveStatus("Local notifications on. Phone push setup needs checking.", true);
+  }
+}
+
+async function sendPushAlert(title, body) {
+  if (!state.authToken || !canUseCloudSync()) return;
+
+  try {
+    await fetch(pushApiPath, {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        action: "notify",
+        title,
+        body,
+      }),
+    });
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = `${base64String}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData].map((character) => character.charCodeAt(0)));
+}
+
 function supportsNotifications() {
   return typeof window !== "undefined" && "Notification" in window;
 }
@@ -1473,14 +1764,27 @@ function isStandaloneApp() {
   );
 }
 
+function isAdmin() {
+  return state.authUser?.role === "admin";
+}
+
+function syncCurrentEmployeeFromAuth() {
+  if (isAdmin() || !state.authUser?.email) return;
+  const employee = state.data.employees.find((item) => normalizeEmail(item.email) === normalizeEmail(state.authUser.email));
+  state.data.currentUserId = employee?.id || null;
+}
+
 function hydrateUserSelect() {
+  syncCurrentEmployeeFromAuth();
+
   if (!state.data.employees.some((employee) => employee.id === state.data.currentUserId)) {
     state.data.currentUserId = state.data.employees[0]?.id || null;
   }
 
-  userSelect.disabled = !state.data.employees.length;
-  userSelect.innerHTML = state.data.employees.length
-    ? state.data.employees.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("")
+  const employees = isAdmin() ? state.data.employees : state.data.employees.filter((employee) => employee.id === state.data.currentUserId);
+  userSelect.disabled = !isAdmin() || !employees.length;
+  userSelect.innerHTML = employees.length
+    ? employees.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("")
     : `<option value="">Add employees first</option>`;
   userSelect.value = state.data.currentUserId || "";
 }
@@ -1725,6 +2029,11 @@ function normalizeData(data) {
     color: normalizeColor(employee.color) || colorForEmployee(employee.id),
   }));
 
+  merged.shifts = merged.shifts.map((shift) => ({
+    ...shift,
+    published: typeof shift.published === "boolean" ? shift.published : shift.status === "Confirmed",
+  }));
+
   if (!merged.channels.some((channel) => channel.id === merged.activeChannel)) {
     merged.activeChannel = merged.channels[0].id;
   }
@@ -1826,7 +2135,19 @@ function normalizeEmail(email) {
 function shiftsForDate(dateKey) {
   return state.data.shifts
     .filter((shift) => shift.date === dateKey)
+    .filter(canSeeShift)
     .sort((a, b) => a.start.localeCompare(b.start));
+}
+
+function weekShifts() {
+  const start = toDateKey(state.weekStart);
+  const end = toDateKey(addDays(state.weekStart, 7));
+  return state.data.shifts.filter((shift) => shift.date >= start && shift.date < end);
+}
+
+function canSeeShift(shift) {
+  if (isAdmin()) return true;
+  return shift.published && shift.employeeId === state.data.currentUserId;
 }
 
 function inferAreas(data, fallbackAreas) {

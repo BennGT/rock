@@ -1,4 +1,4 @@
-const cacheName = "marshal-app-v8";
+const cacheName = "marshal-app-v9";
 const appShell = [
   "./",
   "./index.html",
@@ -51,14 +51,30 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  const targetUrl = event.notification.data?.url || "./index.html";
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if ("focus" in client) return client.focus();
       }
 
-      if (clients.openWindow) return clients.openWindow("./index.html");
+      if (clients.openWindow) return clients.openWindow(targetUrl);
       return null;
     }),
   );
+});
+
+self.addEventListener("push", (event) => {
+  const payload = event.data?.json?.() || {};
+  const title = payload.title || "Marshal";
+  const options = {
+    body: payload.body || "",
+    icon: "assets/marshal-icon-192.png",
+    badge: "assets/marshal-icon-192.png",
+    data: {
+      url: payload.url || "./index.html",
+    },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
 });
