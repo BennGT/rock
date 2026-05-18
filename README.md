@@ -21,7 +21,7 @@ Open `index.html` in a browser to run it locally. When hosted on Netlify with Fu
 - Admin and employee permissions, with employees limited to their published shifts, messages, and own requests.
 - Published schedule workflow so draft roster changes stay hidden until an admin publishes them.
 - Password change and admin password reset.
-- Email invite actions that open a ready-to-send invite in your email app.
+- Email invite actions that copy the invite text and open a ready-to-send email in your email app.
 - Optional Web Push notification support through Netlify Functions.
 
 ## Phone install and notifications

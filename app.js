@@ -1260,20 +1260,18 @@ function openEmployeeModal(employeeId = null) {
   employeeForm.elements.name.focus();
 }
 
-function inviteEmployee(employeeId) {
+async function inviteEmployee(employeeId) {
   const employee = findEmployee(employeeId);
   if (!employee.email) {
     syncSaveStatus("Add an email before inviting this employee", true);
     return;
   }
 
-  const subject = encodeURIComponent("Your Marshal app invite");
-  const body = encodeURIComponent(
-    `Hi ${employee.name},\n\nYou have been invited to use Marshal for Rock N Water Landscapes schedules and messages.\n\nOpen Marshal here:\n${window.location.origin}\n\nUse the email address this invite was sent to. If you do not have a password yet, ask your manager to create your login in Marshal under Setup > Login accounts.\n\nThanks`,
-  );
-
-  window.location.href = `mailto:${encodeURIComponent(employee.email)}?subject=${subject}&body=${body}`;
-  syncSaveStatus(`Invite email ready for ${employee.name}`);
+  await sendInvite({
+    email: employee.email,
+    name: employee.name,
+    body: buildStaffInviteBody(employee.name, employee.email),
+  });
 }
 
 function closeEmployeeModal() {
@@ -1507,17 +1505,75 @@ async function resetAccountPassword(event) {
   }
 }
 
-function inviteAccount(userId) {
+async function inviteAccount(userId) {
   const user = state.authUsers.find((item) => item.id === userId);
   if (!user) return;
 
-  const subject = encodeURIComponent("Your Marshal app invite");
-  const body = encodeURIComponent(
-    `Hi ${user.name},\n\nYou have been invited to use Marshal for Rock N Water Landscapes schedules and messages.\n\nOpen Marshal here:\n${window.location.origin}\n\nSign in with this email address: ${user.email}\n\nYour manager will give you your temporary password separately. After you sign in, go to Setup > Password to change it.\n\nThanks`,
-  );
+  await sendInvite({
+    email: user.email,
+    name: user.name,
+    body: buildLoginInviteBody(user.name, user.email),
+  });
+}
 
-  window.location.href = `mailto:${encodeURIComponent(user.email)}?subject=${subject}&body=${body}`;
-  syncSaveStatus(`Invite email ready for ${user.name}`);
+function buildStaffInviteBody(name, email) {
+  return `Hi ${name},
+
+You have been invited to use Marshal for Rock N Water Landscapes schedules and messages.
+
+Open Marshal here:
+${window.location.origin}
+
+Use this email address to sign in:
+${email}
+
+If you do not have a password yet, ask your manager to create your login in Marshal under Setup > Login accounts.
+
+Thanks`;
+}
+
+function buildLoginInviteBody(name, email) {
+  return `Hi ${name},
+
+You have been invited to use Marshal for Rock N Water Landscapes schedules and messages.
+
+Open Marshal here:
+${window.location.origin}
+
+Sign in with this email address:
+${email}
+
+Your manager will give you your temporary password separately. After you sign in, go to Setup > Password to change it.
+
+Thanks`;
+}
+
+async function sendInvite({ email, name, body }) {
+  const copied = await copyText(body);
+  const subject = encodeURIComponent("Your Marshal app invite");
+  const encodedBody = encodeURIComponent(body);
+  const mailtoUrl = `mailto:${encodeURIComponent(email)}?subject=${subject}&body=${encodedBody}`;
+  const link = document.createElement("a");
+  link.href = mailtoUrl;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+
+  syncSaveStatus(copied ? `Invite copied and email opened for ${name}` : `Email opened for ${name}`);
+}
+
+async function copyText(text) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (error) {
+    console.error(error);
+  }
+
+  return false;
 }
 
 async function authRequest(body = null, method = "POST") {
