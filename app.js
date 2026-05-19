@@ -1423,7 +1423,10 @@ async function initAuth() {
 
   try {
     if (state.inviteToken) {
+      clearLocalAuthSession();
       await loadInviteDetails();
+      syncAuthScreen();
+      return;
     }
 
     const payload = await authRequest(null, "GET");
@@ -1450,6 +1453,16 @@ async function initAuth() {
     syncAuthScreen();
     console.error(error);
   }
+}
+
+function clearLocalAuthSession() {
+  state.authToken = null;
+  state.authUser = null;
+  state.authUsers = [];
+  state.authInvites = [];
+  state.cloudStatus = "local";
+  stopCloudRefresh();
+  localStorage.removeItem(authTokenKey);
 }
 
 async function loadInviteDetails() {
