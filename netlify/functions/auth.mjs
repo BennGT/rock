@@ -41,6 +41,7 @@ export default async function handler(request) {
 
     const body = await request.json().catch(() => ({}));
     const action = body.action;
+    const dataStore = getMarshalStore("marshal");
 
     if (action === "setup") {
       return setupOwner(store, body);
@@ -51,7 +52,7 @@ export default async function handler(request) {
     }
 
     if (action === "accept-invite") {
-      return acceptInvite(store, body);
+      return acceptInvite(store, dataStore, body);
     }
 
     if (action === "logout") {
@@ -83,6 +84,10 @@ export default async function handler(request) {
 
     if (action === "delete-user") {
       return deleteUser(store, body, currentUser);
+    }
+
+    if (action === "delete-invite") {
+      return deleteInvite(store, body);
     }
 
     if (action === "reset-password") {
@@ -206,7 +211,7 @@ async function getInvite(store, token) {
   });
 }
 
-async function acceptInvite(store, body) {
+async function acceptInvite(store, dataStore, body) {
   const invites = await getInvites(store);
   const invite = invites.find((item) => item.token === body.token);
   if (!invite) return json(404, { error: "Invite link not found" });
@@ -234,9 +239,85 @@ async function acceptInvite(store, body) {
 
   await setUsers(store, users);
   await setInvites(store, invites);
+  await upsertEmployeeFromInvite(dataStore, invite, body);
 
   const sessionToken = await createSession(store, user.id);
   return json(200, { token: sessionToken, user: publicUser(user), users: [], invites: [] });
+}
+
+async function upsertEmployeeFromInvite(store, invite, body) {
+  const data = (await store.get("shared-data", { type: "json" })) || {};
+  const employees = Array.isArray(data.employees) ? data.employees : [];
+  const email = normalizeEmail(invite.email);
+  const existingIndex = employees.findIndex((employee) => normalizeEmail(employee.email) === email);
+  const existing = existingIndex >= 0 ? employees[existingIndex] : {};
+  const name = String(body.name || invite.name || "").trim();
+  const employee = {
+    ...existing,
+    id: existing.id || crypto.randomUUID(),
+    name,
+    initials: normalizeInitials(body.initials, name),
+    role: existing.role || "Team member",
+    email,
+    phone: String(body.phone || existing.phone || "").trim(),
+    nextOfKinName: String(body.nextOfKinName || existing.nextOfKinName || "").trim(),
+    nextOfKinPhone: String(body.nextOfKinPhone || existing.nextOfKinPhone || "").trim(),
+    color: existing.color || colorForText(email),
+    status: existing.status || "Available",
+  };
+
+  if (existingIndex >= 0) {
+    employees[existingIndex] = employee;
+  } else {
+    employees.push(employee);
+  }
+
+  const nextData = {
+    businessName: data.businessName || "Marshal",
+    businessSubtitle: data.businessSubtitle || "Rock N Water Landscapes",
+    appInstalled: Boolean(data.appInstalled),
+    notificationsEnabled: Boolean(data.notificationsEnabled),
+    currentUserId: data.currentUserId || employee.id,
+    activeChannel: data.activeChannel || "ops",
+    areas: Array.isArray(data.areas) && data.areas.length ? data.areas : ["General", "Landscaping", "Maintenance", "Construction", "Admin"],
+    employees,
+    channels:
+      Array.isArray(data.channels) && data.channels.length
+        ? data.channels
+        : [
+            { id: "announcements", name: "Announcements", description: "Company-wide updates and policy notes" },
+            { id: "ops", name: "Operations", description: "Daily handover and shift coordination" },
+            { id: "managers", name: "Managers", description: "Roster, coverage, and approval discussion" },
+          ],
+    shifts: Array.isArray(data.shifts) ? data.shifts : [],
+    messages: Array.isArray(data.messages) ? data.messages : [],
+    requests: Array.isArray(data.requests) ? data.requests : [],
+    savedAt: new Date().toISOString(),
+  };
+
+  await store.setJSON("shared-data", nextData);
+}
+
+function normalizeInitials(initials, name) {
+  const value = String(initials || "").trim().toUpperCase();
+  if (value) return value.slice(0, 3);
+  return String(name || "")
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+function colorForText(text) {
+  const palette = ["#276ef1", "#087f72", "#b42318", "#9a6700", "#7c3aed", "#0f766e", "#c2410c", "#be123c"];
+  const value = String(text || "");
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % palette.length;
+  }
+  return palette[hash] || palette[0];
 }
 
 async function deleteUser(store, body, currentUser) {
@@ -248,6 +329,16 @@ async function deleteUser(store, body, currentUser) {
   const remainingUsers = users.filter((user) => user.id !== userId);
   await setUsers(store, remainingUsers);
   return json(200, { users: publicUsers(remainingUsers) });
+}
+
+async function deleteInvite(store, body) {
+  const invites = await getInvites(store);
+  const inviteId = body.inviteId;
+  if (!inviteId) return json(400, { error: "Missing invite id" });
+
+  const remainingInvites = invites.filter((invite) => invite.id !== inviteId);
+  await setInvites(store, remainingInvites);
+  return json(200, { invites: publicInvites(remainingInvites) });
 }
 
 async function changePassword(store, body, currentUser) {

@@ -64,6 +64,7 @@ const authForm = document.querySelector("#authForm");
 const authTitle = document.querySelector("#authTitle");
 const authIntro = document.querySelector("#authIntro");
 const authNameField = document.querySelector("#authNameField");
+const inviteProfileFields = document.querySelector("#inviteProfileFields");
 const authError = document.querySelector("#authError");
 const authSubmitButton = document.querySelector("#authSubmitButton");
 const shiftModal = document.querySelector("#shiftModal");
@@ -351,6 +352,14 @@ function bindViewEvents() {
 
   appView.querySelectorAll("[data-invite-token]").forEach((button) => {
     button.addEventListener("click", () => copyInviteLink(button.dataset.inviteToken));
+  });
+
+  appView.querySelectorAll("[data-email-invite-id]").forEach((button) => {
+    button.addEventListener("click", () => emailInviteLink(button.dataset.emailInviteId));
+  });
+
+  appView.querySelectorAll("[data-delete-invite-id]").forEach((button) => {
+    button.addEventListener("click", () => deleteInvite(button.dataset.deleteInviteId));
   });
 
   appView.querySelectorAll("[data-reset-password-form]").forEach((form) => {
@@ -1142,6 +1151,8 @@ function renderInviteRow(invite) {
       <input type="text" value="${escapeHtml(inviteLink)}" aria-label="Invite link for ${escapeHtml(invite.name)}" readonly />
       <div class="row-actions">
         <button class="ghost-button" data-invite-token="${invite.token}" type="button">Copy link</button>
+        <button class="ghost-button" data-email-invite-id="${invite.id}" type="button">Email</button>
+        <button class="ghost-button" data-delete-invite-id="${invite.id}" type="button">Delete</button>
       </div>
     </div>
   `;
@@ -1399,7 +1410,12 @@ function syncAuthScreen() {
 
   const acceptingInvite = Boolean(state.inviteToken);
   authNameField.classList.toggle("hidden", !state.setupRequired && !acceptingInvite);
+  inviteProfileFields.classList.toggle("hidden", !acceptingInvite);
   authForm.elements.name.required = state.setupRequired || acceptingInvite;
+  authForm.elements.initials.required = acceptingInvite;
+  authForm.elements.phone.required = acceptingInvite;
+  authForm.elements.nextOfKinName.required = acceptingInvite;
+  authForm.elements.nextOfKinPhone.required = acceptingInvite;
   authForm.elements.email.readOnly = acceptingInvite && Boolean(state.inviteDetails?.email);
   authForm.elements.email.value = acceptingInvite && state.inviteDetails?.email ? state.inviteDetails.email : authForm.elements.email.value;
   authForm.elements.name.value = acceptingInvite && state.inviteDetails?.name ? state.inviteDetails.name : authForm.elements.name.value;
@@ -1493,6 +1509,10 @@ async function submitAuth(event) {
         name: formData.get("name"),
         email: formData.get("email"),
         password: formData.get("password"),
+        initials: formData.get("initials"),
+        phone: formData.get("phone"),
+        nextOfKinName: formData.get("nextOfKinName"),
+        nextOfKinPhone: formData.get("nextOfKinPhone"),
       },
       "POST",
     );
@@ -1580,6 +1600,21 @@ async function deleteAccount(userId) {
   }
 }
 
+async function deleteInvite(inviteId) {
+  const invite = state.authInvites.find((item) => item.id === inviteId);
+  const label = invite ? `${invite.name} (${invite.email})` : "this invite";
+  if (typeof confirm === "function" && !confirm(`Delete invite for ${label}? The link will stop working.`)) return;
+
+  try {
+    const payload = await authRequest({ action: "delete-invite", inviteId }, "POST");
+    state.authInvites = payload.invites || [];
+    syncSaveStatus("Invite deleted");
+    render();
+  } catch (error) {
+    syncSaveStatus(error.message || "Could not delete invite", true);
+  }
+}
+
 async function changeOwnPassword(event) {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
@@ -1639,6 +1674,17 @@ async function inviteAccount(userId) {
 async function copyInviteLink(token) {
   const copied = await copyText(buildInviteLink(token));
   syncSaveStatus(copied ? "Invite link copied" : "Could not copy invite link", !copied);
+}
+
+async function emailInviteLink(inviteId) {
+  const invite = state.authInvites.find((item) => item.id === inviteId);
+  if (!invite) return;
+
+  await sendInvite({
+    email: invite.email,
+    name: invite.name,
+    body: buildStaffInviteBody(invite.name, invite.email, buildInviteLink(invite.token)),
+  });
 }
 
 function buildInviteLink(token) {
@@ -2185,10 +2231,15 @@ async function refreshAuthLists() {
     const payload = await authRequest(null, "GET");
     state.authUsers = payload.users || state.authUsers;
     state.authInvites = payload.invites || state.authInvites;
-    if (state.view === "setup") render();
+    if (state.view === "setup" && !isTypingInAppView()) render();
   } catch (error) {
     console.error(error);
   }
+}
+
+function isTypingInAppView() {
+  const active = document.activeElement;
+  return Boolean(active && appView.contains(active) && ["INPUT", "SELECT", "TEXTAREA"].includes(active.tagName));
 }
 
 function canUseCloudSync() {
