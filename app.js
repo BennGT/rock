@@ -30,6 +30,12 @@ const state = {
   authUser: null,
   authUsers: [],
   authInvites: [],
+  inviteDraft: {
+    name: "",
+    email: "",
+    phone: "",
+    role: "employee",
+  },
   setupRequired: false,
   data: loadData(),
 };
@@ -319,6 +325,13 @@ function bindViewEvents() {
     button.addEventListener("click", () => openEmployeeModal());
   });
 
+  const accountForm = appView.querySelector("#accountForm");
+  if (accountForm) {
+    accountForm.addEventListener("input", saveInviteDraft);
+    accountForm.addEventListener("change", saveInviteDraft);
+    accountForm.addEventListener("submit", createAccount);
+  }
+
   appView.querySelectorAll("[data-action='export-data']").forEach((button) => {
     button.addEventListener("click", exportBackup);
   });
@@ -531,10 +544,16 @@ function bindViewEvents() {
     });
   });
 
-  const accountForm = appView.querySelector("#accountForm");
-  if (accountForm) {
-    accountForm.addEventListener("submit", createAccount);
-  }
+}
+
+function saveInviteDraft(event) {
+  const form = event.currentTarget;
+  state.inviteDraft = {
+    name: form.elements.inviteName?.value || "",
+    email: form.elements.inviteEmail?.value || "",
+    phone: form.elements.invitePhone?.value || "",
+    role: form.elements.inviteRole?.value || "employee",
+  };
 }
 
 function renderDashboard() {
@@ -856,13 +875,13 @@ function renderSetup() {
                 </div>
               </div>
               <div class="panel-body">
-                <form class="inline-form account-form" id="accountForm">
-                  <input name="name" type="text" placeholder="Name" aria-label="Name" required />
-                  <input name="email" type="email" placeholder="Email" aria-label="Email" required />
-                  <input name="phone" type="tel" placeholder="Phone" aria-label="Phone" />
-                  <select name="role" aria-label="Role">
-                    <option value="employee">Employee</option>
-                    <option value="admin">Admin</option>
+                <form class="inline-form account-form" id="accountForm" autocomplete="off">
+                  <input name="inviteName" type="text" placeholder="Employee name" aria-label="Employee name" autocomplete="off" value="${escapeHtml(state.inviteDraft.name)}" required />
+                  <input name="inviteEmail" type="email" placeholder="Employee email" aria-label="Employee email" autocomplete="off" inputmode="email" value="${escapeHtml(state.inviteDraft.email)}" required />
+                  <input name="invitePhone" type="tel" placeholder="Employee phone" aria-label="Employee phone" autocomplete="off" inputmode="tel" value="${escapeHtml(state.inviteDraft.phone)}" />
+                  <select name="inviteRole" aria-label="Role" autocomplete="off">
+                    <option value="employee" ${state.inviteDraft.role === "employee" ? "selected" : ""}>Employee</option>
+                    <option value="admin" ${state.inviteDraft.role === "admin" ? "selected" : ""}>Admin</option>
                   </select>
                   <button class="primary-button" type="submit">Create invite</button>
                 </form>
@@ -1565,15 +1584,21 @@ async function createAccount(event) {
     const payload = await authRequest(
       {
         action: "create-invite",
-        name: formData.get("name"),
-        email: formData.get("email"),
-        phone: formData.get("phone"),
-        role: formData.get("role"),
+        name: formData.get("inviteName"),
+        email: formData.get("inviteEmail"),
+        phone: formData.get("invitePhone"),
+        role: formData.get("inviteRole"),
       },
       "POST",
     );
 
     state.authInvites = payload.invites || [];
+    state.inviteDraft = {
+      name: "",
+      email: "",
+      phone: "",
+      role: "employee",
+    };
     event.currentTarget.reset();
     if (payload.invite?.token) {
       await copyText(buildInviteLink(payload.invite.token));
@@ -2144,7 +2169,7 @@ async function loadCloudData(options = {}) {
       syncInstallButton();
       syncNotificationButton();
       hydrateUserSelect();
-      render();
+      if (!isTypingInAppView()) render();
       state.cloudStatus = "synced";
       state.localChangedDuringCloudLoad = false;
       syncSaveStatus(options.silent ? null : "Loaded shared data");
