@@ -264,7 +264,7 @@ async function upsertEmployeeFromInvite(store, invite, body) {
     initials: normalizeInitials(body.initials, name),
     role: existing.role || "Team member",
     email,
-    phone: String(body.phone || existing.phone || "").trim(),
+    phone: String(body.phone || invite.phone || existing.phone || "").trim(),
     nextOfKinName: String(body.nextOfKinName || existing.nextOfKinName || "").trim(),
     nextOfKinPhone: String(body.nextOfKinPhone || existing.nextOfKinPhone || "").trim(),
     color: existing.color || colorForText(email),

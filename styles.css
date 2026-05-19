@@ -107,14 +107,13 @@ button {
 }
 
 .app-shell {
-  display: grid;
-  grid-template-columns: 268px minmax(0, 1fr);
   min-height: 100vh;
 }
 
 .sidebar {
-  position: sticky;
-  top: 0;
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: min(300px, 86vw);
   height: 100vh;
   display: flex;
   flex-direction: column;
@@ -122,6 +121,14 @@ button {
   padding: 24px 16px;
   background: #211a17;
   color: #f7fafb;
+  box-shadow: 20px 0 45px rgba(0, 0, 0, 0.22);
+  transform: translateX(-105%);
+  transition: transform 180ms ease;
+  z-index: 20;
+}
+
+.menu-open .sidebar {
+  transform: translateX(0);
 }
 
 .brand {
@@ -247,6 +254,22 @@ button {
   gap: 18px;
   margin: 0 auto 22px;
   max-width: 1280px;
+}
+
+.topbar-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.menu-button {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 900;
 }
 
 .eyebrow {
@@ -1093,35 +1116,16 @@ textarea {
 }
 
 @media (max-width: 1060px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .sidebar {
-    position: static;
-    height: auto;
-    flex-direction: row;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-
   .brand {
-    flex: 1 1 220px;
-  }
-
-  .nav-tabs {
-    flex: 1 1 100%;
-    display: flex;
-    overflow-x: auto;
-  }
-
-  .nav-tab {
     flex: 0 0 auto;
   }
 
-  .user-switcher {
-    margin-top: 0;
-    min-width: 220px;
+  .nav-tabs {
+    display: grid;
+  }
+
+  .nav-tab {
+    width: 100%;
   }
 
   .dashboard-grid,

@@ -64,6 +64,8 @@ const todayLabel = document.querySelector("#todayLabel");
 const brandFallback = document.querySelector("#brandFallback");
 const brandName = document.querySelector("#brandName");
 const brandSubtitle = document.querySelector("#brandSubtitle");
+const menuButton = document.querySelector("#menuButton");
+const appMenu = document.querySelector("#appMenu");
 const saveStatus = document.querySelector("#saveStatus");
 const accountStatus = document.querySelector("#accountStatus");
 const signOutButton = document.querySelector("#signOutButton");
@@ -75,7 +77,6 @@ const authForm = document.querySelector("#authForm");
 const authTitle = document.querySelector("#authTitle");
 const authIntro = document.querySelector("#authIntro");
 const authNameField = document.querySelector("#authNameField");
-const inviteProfileFields = document.querySelector("#inviteProfileFields");
 const authError = document.querySelector("#authError");
 const authSubmitButton = document.querySelector("#authSubmitButton");
 const shiftModal = document.querySelector("#shiftModal");
@@ -105,7 +106,16 @@ function bindChrome() {
     const tab = event.target.closest("[data-view]");
     if (!tab) return;
     state.view = tab.dataset.view;
+    closeMenu();
     render();
+  });
+
+  menuButton.addEventListener("click", () => {
+    document.body.classList.toggle("menu-open");
+  });
+
+  appMenu.addEventListener("click", (event) => {
+    if (event.target.closest("[data-view]")) closeMenu();
   });
 
   backupFileInput.addEventListener("change", importBackup);
@@ -352,6 +362,11 @@ function bindViewEvents() {
     button.addEventListener("click", () => notifyTeam("Sherif notifications are on", "Schedule and message alerts can appear on this device.", true));
   });
 
+  const personalDetailsForm = appView.querySelector("#personalDetailsForm");
+  if (personalDetailsForm) {
+    personalDetailsForm.addEventListener("submit", savePersonalDetails);
+  }
+
   appView.querySelectorAll("[data-delete-account-id]").forEach((button) => {
     button.addEventListener("click", () => deleteAccount(button.dataset.deleteAccountId));
   });
@@ -554,6 +569,10 @@ function saveInviteDraft(event) {
     phone: form.elements.invitePhone?.value || "",
     role: form.elements.inviteRole?.value || "employee",
   };
+}
+
+function closeMenu() {
+  document.body.classList.remove("menu-open");
 }
 
 function renderDashboard() {
@@ -801,6 +820,7 @@ function renderSetup() {
   if (!isAdmin()) {
     return `
       <div class="setup-layout">
+        ${renderPersonalDetailsPanel()}
         ${renderPasswordPanel()}
         ${renderPhoneAlertsPanel()}
       </div>
@@ -809,6 +829,7 @@ function renderSetup() {
 
   return `
     <div class="setup-layout">
+      ${renderPersonalDetailsPanel()}
       ${renderPasswordPanel()}
       <section class="panel">
         <div class="panel-head">
@@ -876,9 +897,9 @@ function renderSetup() {
               </div>
               <div class="panel-body">
                 <form class="inline-form account-form" id="accountForm" autocomplete="off">
-                  <input name="inviteName" type="text" placeholder="Employee name" aria-label="Employee name" autocomplete="off" value="${escapeHtml(state.inviteDraft.name)}" required />
-                  <input name="inviteEmail" type="email" placeholder="Employee email" aria-label="Employee email" autocomplete="off" inputmode="email" value="${escapeHtml(state.inviteDraft.email)}" />
-                  <input name="invitePhone" type="tel" placeholder="Employee phone" aria-label="Employee phone" autocomplete="off" inputmode="tel" value="${escapeHtml(state.inviteDraft.phone)}" />
+                  <input name="inviteName" type="text" placeholder="Name" aria-label="Name" autocomplete="off" value="${escapeHtml(state.inviteDraft.name)}" required />
+                  <input name="inviteEmail" type="email" placeholder="Email" aria-label="Email" autocomplete="off" inputmode="email" value="${escapeHtml(state.inviteDraft.email)}" />
+                  <input name="invitePhone" type="tel" placeholder="Phone" aria-label="Phone" autocomplete="off" inputmode="tel" value="${escapeHtml(state.inviteDraft.phone)}" />
                   <select name="inviteRole" aria-label="Role" autocomplete="off">
                     <option value="employee" ${state.inviteDraft.role === "employee" ? "selected" : ""}>Employee</option>
                     <option value="admin" ${state.inviteDraft.role === "admin" ? "selected" : ""}>Admin</option>
@@ -896,6 +917,67 @@ function renderSetup() {
           : ""
       }
     </div>
+  `;
+}
+
+function renderPersonalDetailsPanel() {
+  const employee = getCurrentUser();
+  if (!employee.id) {
+    return `
+      <section class="panel wide-panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">My details</h2>
+            <p class="panel-subtitle">Your staff profile appears after your account is linked</p>
+          </div>
+        </div>
+        <div class="panel-body">
+          <div class="empty-state">Ask an admin to send you an invite or match your Staff email to your login email.</div>
+        </div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="panel wide-panel">
+      <div class="panel-head">
+        <div>
+          <h2 class="panel-title">My details</h2>
+          <p class="panel-subtitle">Keep your personal and emergency details up to date</p>
+        </div>
+      </div>
+      <div class="panel-body">
+        <form class="form-grid" id="personalDetailsForm">
+          <label>
+            Name
+            <input name="name" type="text" value="${escapeHtml(employee.name)}" required />
+          </label>
+          <label>
+            Initials
+            <input name="initials" type="text" maxlength="3" value="${escapeHtml(employee.initials)}" required />
+          </label>
+          <label>
+            Email
+            <input name="email" type="email" value="${escapeHtml(employee.email)}" required />
+          </label>
+          <label>
+            Phone
+            <input name="phone" type="tel" value="${escapeHtml(employee.phone)}" />
+          </label>
+          <label>
+            Next of kin
+            <input name="nextOfKinName" type="text" value="${escapeHtml(employee.nextOfKinName)}" />
+          </label>
+          <label>
+            Next of kin phone
+            <input name="nextOfKinPhone" type="tel" value="${escapeHtml(employee.nextOfKinPhone)}" />
+          </label>
+          <div class="modal-actions full-field">
+            <button class="primary-button" type="submit">Save my details</button>
+          </div>
+        </form>
+      </div>
+    </section>
   `;
 }
 
@@ -1097,6 +1179,34 @@ function renderAreaRow(area) {
       <button class="ghost-button" data-remove-area="${escapeHtml(area)}" type="button" ${locked ? "disabled" : ""}>Remove</button>
     </div>
   `;
+}
+
+function savePersonalDetails(event) {
+  event.preventDefault();
+  const employee = getCurrentUser();
+  if (!employee.id) {
+    syncSaveStatus("Staff profile is not linked yet", true);
+    return;
+  }
+
+  const formData = new FormData(event.currentTarget);
+  const existingIndex = state.data.employees.findIndex((item) => item.id === employee.id);
+  if (existingIndex < 0) return;
+
+  state.data.employees[existingIndex] = {
+    ...state.data.employees[existingIndex],
+    name: String(formData.get("name") || "").trim(),
+    initials: String(formData.get("initials") || "").trim().toUpperCase(),
+    email: normalizeEmail(formData.get("email")),
+    phone: String(formData.get("phone") || "").trim(),
+    nextOfKinName: String(formData.get("nextOfKinName") || "").trim(),
+    nextOfKinPhone: String(formData.get("nextOfKinPhone") || "").trim(),
+  };
+
+  saveData();
+  syncCurrentEmployeeFromAuth();
+  syncSaveStatus("Personal details saved");
+  render();
 }
 
 function deleteMessage(messageId) {
@@ -1426,12 +1536,7 @@ function syncAuthScreen() {
 
   const acceptingInvite = Boolean(state.inviteToken);
   authNameField.classList.toggle("hidden", !state.setupRequired && !acceptingInvite);
-  inviteProfileFields.classList.toggle("hidden", !acceptingInvite);
   authForm.elements.name.required = state.setupRequired || acceptingInvite;
-  authForm.elements.initials.required = acceptingInvite;
-  authForm.elements.phone.required = acceptingInvite;
-  authForm.elements.nextOfKinName.required = acceptingInvite;
-  authForm.elements.nextOfKinPhone.required = acceptingInvite;
   authForm.elements.email.readOnly = acceptingInvite && Boolean(state.inviteDetails?.email);
   authForm.elements.email.value = acceptingInvite && state.inviteDetails?.email ? state.inviteDetails.email : authForm.elements.email.value;
   authForm.elements.name.value = acceptingInvite && state.inviteDetails?.name ? state.inviteDetails.name : authForm.elements.name.value;
@@ -1525,10 +1630,6 @@ async function submitAuth(event) {
         name: formData.get("name"),
         email: formData.get("email"),
         password: formData.get("password"),
-        initials: formData.get("initials"),
-        phone: formData.get("phone"),
-        nextOfKinName: formData.get("nextOfKinName"),
-        nextOfKinPhone: formData.get("nextOfKinPhone"),
       },
       "POST",
     );

@@ -35,24 +35,6 @@
             Password
             <input name="password" type="password" autocomplete="current-password" required minlength="8" />
           </label>
-          <div class="invite-profile hidden" id="inviteProfileFields">
-            <label>
-              Initials
-              <input name="initials" type="text" maxlength="3" autocomplete="off" />
-            </label>
-            <label>
-              Phone
-              <input name="phone" type="tel" autocomplete="tel" />
-            </label>
-            <label>
-              Next of kin
-              <input name="nextOfKinName" type="text" autocomplete="off" />
-            </label>
-            <label>
-              Next of kin phone
-              <input name="nextOfKinPhone" type="tel" />
-            </label>
-          </div>
           <div class="auth-error" id="authError" role="alert"></div>
           <button class="primary-button" type="submit" id="authSubmitButton">Sign in</button>
         </form>
@@ -60,7 +42,7 @@
     </div>
 
     <div class="app-shell">
-      <aside class="sidebar" aria-label="Main">
+      <aside class="sidebar" id="appMenu" aria-label="Main">
         <div class="brand">
           <div class="brand-mark" aria-hidden="true">
             <img id="brandLogo" src="assets/rnw-logo.png" alt="" />
@@ -99,9 +81,12 @@
 
       <main class="main-panel">
         <header class="topbar">
-          <div>
-            <p class="eyebrow" id="todayLabel"></p>
-            <h1 id="viewTitle">Today</h1>
+          <div class="topbar-title">
+            <button class="menu-button" id="menuButton" type="button" aria-label="Open menu">Menu</button>
+            <div>
+              <p class="eyebrow" id="todayLabel"></p>
+              <h1 id="viewTitle">Today</h1>
+            </div>
           </div>
           <div class="topbar-actions">
             <div class="save-status" id="saveStatus" role="status" aria-live="polite">Saved locally</div>
