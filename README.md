@@ -1,18 +1,18 @@
-# Marshal
+# Sherif
 
-Marshal is a browser-based workforce app for Rock N Water Landscapes schedules, staff requests, and internal messages.
+Sherif is a browser-based workforce app for Rock N Water Landscapes schedules, staff requests, and internal messages.
 
-Open `index.html` in a browser to run it locally. When hosted on Netlify with Functions enabled, staff, schedules, requests, messages, setup changes, and channels sync through the hosted shared data store. If the cloud store is unavailable, Marshal falls back to saving on the current device.
+Open `index.html` in a browser to run it locally. When hosted on Netlify with Functions enabled, staff, schedules, requests, messages, setup changes, and invites sync through the hosted shared data store. If the cloud store is unavailable, Sherif falls back to saving on the current device.
 
 ## Included
 
 - Today dashboard with coverage, open shifts, pending requests, and weekly roster totals.
 - Weekly schedule with create, edit, delete, copy, and paste shift actions.
-- Team message channels for announcements, operations, and managers.
+- Single team messaging channel with individual message deletion.
 - Staff directory with add, edit, and delete employee actions.
 - Employee records use name, initials, role, phone, and status.
 - Simple leave, availability, and shift-swap requests with editable statuses.
-- Setup page for business name, sidebar label, work areas, and message channels.
+- Setup page for business name, sidebar label, work areas, and invitations.
 - Backup export and import from the Setup page.
 - Installable phone app support through a web app manifest and service worker.
 - Browser notifications for saved shifts, staff updates, messages, and requests on the current device.
@@ -27,13 +27,13 @@ Open `index.html` in a browser to run it locally. When hosted on Netlify with Fu
 
 ## Phone install and notifications
 
-Marshal can be installed on phones once it is served over `https://` or from `localhost` during testing. Use the **Install app** button where supported, or use the browser menu to add it to the home screen.
+Sherif can be installed on phones once it is served over `https://` or from `localhost` during testing. Use the **Install app** button where supported, or use the browser menu to add it to the home screen.
 
-Marshal supports local browser notifications immediately after a device grants permission. It also includes optional Web Push support for phone alerts after the Netlify environment variables below are configured.
+Sherif supports local browser notifications immediately after a device grants permission. It also includes optional Web Push support for phone alerts after the Netlify environment variables below are configured.
 
 ## Netlify hosting
 
-Marshal is ready to host on Netlify. For phone-to-PC syncing, deploy it through Git or the Netlify CLI so Netlify installs the `@netlify/blobs` dependency and deploys the serverless functions in `netlify/functions`.
+Sherif is ready to host on Netlify. For phone-to-PC syncing, deploy it through Git or the Netlify CLI so Netlify installs the `@netlify/blobs` dependency and deploys the serverless functions in `netlify/functions`.
 
 Best option for shared saving:
 
@@ -64,11 +64,11 @@ Manual folder upload can show the app, but shared PC-to-phone saving may not wor
 
 ## Sign-in
 
-On the first hosted visit, Marshal asks you to create the owner account. After that, everyone must sign in with email and password.
+On the first hosted visit, Sherif asks you to create the owner account. After that, everyone must sign in with email and password.
 
 The owner/admin can create invite links from **Setup > Login accounts**. Staff use the invite link to choose their own password. Passwords are hashed in the Netlify Function before being stored. Staff can change their own password from **Setup > Password**, and admins can reset passwords from **Setup > Login accounts**.
 
-Use the same email address for the employee's login account and their Staff profile. That link lets Marshal show employees only their published shifts and their own requests.
+Use the same email address for the employee's login account and their Staff profile. That link lets Sherif show employees only their published shifts and their own requests.
 
 ## Good next steps
 

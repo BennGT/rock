@@ -55,9 +55,11 @@ export default async function handler(request) {
 }
 
 function mergeAdminData(currentData, incomingData) {
+  const deletedMessageIds = mergeDeletedIds(currentData.deletedMessageIds, incomingData.deletedMessageIds);
   return {
     ...incomingData,
-    messages: mergeById(currentData.messages, incomingData.messages),
+    deletedMessageIds,
+    messages: mergeById(currentData.messages, incomingData.messages).filter((message) => !deletedMessageIds.includes(message.id)),
     requests: mergeById(currentData.requests, incomingData.requests),
   };
 }
@@ -68,9 +70,10 @@ function mergeEmployeeData(currentData, incomingData, user) {
 
   const currentMessages = Array.isArray(currentData.messages) ? currentData.messages : [];
   const incomingMessages = Array.isArray(incomingData.messages) ? incomingData.messages : [];
+  const deletedMessageIds = mergeDeletedIds(currentData.deletedMessageIds, incomingData.deletedMessageIds);
   const currentMessageIds = new Set(currentMessages.map((message) => message.id));
   const newOwnMessages = incomingMessages.filter(
-    (message) => message.employeeId === employeeId && message.id && !currentMessageIds.has(message.id),
+    (message) => message.employeeId === employeeId && message.id && !currentMessageIds.has(message.id) && !deletedMessageIds.includes(message.id),
   );
 
   const currentRequests = Array.isArray(currentData.requests) ? currentData.requests : [];
@@ -88,7 +91,8 @@ function mergeEmployeeData(currentData, incomingData, user) {
 
   return {
     ...currentData,
-    messages: [...currentMessages, ...newOwnMessages],
+    deletedMessageIds,
+    messages: [...currentMessages, ...newOwnMessages].filter((message) => !deletedMessageIds.includes(message.id)),
     requests: [...ownRequests, ...otherRequests],
     savedAt: incomingData.savedAt || currentData.savedAt,
   };
@@ -116,6 +120,10 @@ function mergeById(currentItems = [], incomingItems = []) {
     });
   }
   return Array.from(merged.values());
+}
+
+function mergeDeletedIds(currentIds = [], incomingIds = []) {
+  return Array.from(new Set([...(Array.isArray(currentIds) ? currentIds : []), ...(Array.isArray(incomingIds) ? incomingIds : [])]));
 }
 
 function getMarshalStore(name) {

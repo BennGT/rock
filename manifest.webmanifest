@@ -1,13 +1,13 @@
 {
-  "name": "Marshal",
-  "short_name": "Marshal",
+  "name": "Sherif",
+  "short_name": "Sherif",
   "description": "Rock N Water Landscapes roster, staff, and messaging app.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#f6f7f8",
-  "theme_color": "#101820",
+  "background_color": "#f7f4f2",
+  "theme_color": "#a33a24",
   "icons": [
     {
       "src": "assets/marshal-icon-192.png",

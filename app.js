@@ -5,6 +5,11 @@ const legacyStorageKeys = ["shiftlink-demo-v1"];
 const cloudApiPath = "/.netlify/functions/data";
 const authApiPath = "/.netlify/functions/auth";
 const pushApiPath = "/.netlify/functions/push";
+const teamChannel = {
+  id: "team",
+  name: "Team",
+  description: "Company messages and daily updates",
+};
 
 const state = {
   view: "dashboard",
@@ -45,7 +50,7 @@ const areaColors = {
   Admin: "#6b7280",
 };
 
-const employeeColorPalette = ["#276ef1", "#087f72", "#b42318", "#9a6700", "#7c3aed", "#0f766e", "#c2410c", "#be123c"];
+const employeeColorPalette = ["#a33a24", "#087aa3", "#d84a2a", "#211a17", "#0f766e", "#9a6700", "#7c3aed", "#be123c"];
 
 const appView = document.querySelector("#appView");
 const viewTitle = document.querySelector("#viewTitle");
@@ -94,18 +99,6 @@ function bindChrome() {
     const tab = event.target.closest("[data-view]");
     if (!tab) return;
     state.view = tab.dataset.view;
-    render();
-  });
-
-  document.querySelector("#seedReset").addEventListener("click", () => {
-    if (typeof confirm === "function" && !confirm("Clear all saved Marshal data? This will remove staff, schedules, messages, requests, setup changes, and hosted shared data.")) return;
-    localStorage.removeItem(storageKey);
-    legacyStorageKeys.forEach((key) => localStorage.removeItem(key));
-    state.data = createSeedData();
-    state.weekStart = startOfWeek(new Date());
-    syncShell();
-    hydrateUserSelect();
-    saveData();
     render();
   });
 
@@ -318,6 +311,10 @@ function bindViewEvents() {
     });
   });
 
+  appView.querySelectorAll("[data-delete-message-id]").forEach((button) => {
+    button.addEventListener("click", () => deleteMessage(button.dataset.deleteMessageId));
+  });
+
   appView.querySelectorAll("[data-action='new-employee']").forEach((button) => {
     button.addEventListener("click", () => openEmployeeModal());
   });
@@ -339,7 +336,7 @@ function bindViewEvents() {
   });
 
   appView.querySelectorAll("[data-action='test-notification']").forEach((button) => {
-    button.addEventListener("click", () => notifyTeam("Marshal notifications are on", "Schedule and message alerts can appear on this device.", true));
+    button.addEventListener("click", () => notifyTeam("Sherif notifications are on", "Schedule and message alerts can appear on this device.", true));
   });
 
   appView.querySelectorAll("[data-delete-account-id]").forEach((button) => {
@@ -356,6 +353,10 @@ function bindViewEvents() {
 
   appView.querySelectorAll("[data-email-invite-id]").forEach((button) => {
     button.addEventListener("click", () => emailInviteLink(button.dataset.emailInviteId));
+  });
+
+  appView.querySelectorAll("[data-sms-invite-id]").forEach((button) => {
+    button.addEventListener("click", () => smsInviteLink(button.dataset.smsInviteId));
   });
 
   appView.querySelectorAll("[data-delete-invite-id]").forEach((button) => {
@@ -434,7 +435,7 @@ function bindViewEvents() {
       if (!text) return;
       state.data.messages.push({
         id: crypto.randomUUID(),
-        channel: state.data.activeChannel,
+        channel: teamChannel.id,
         employeeId: state.data.currentUserId,
         body: text,
         createdAt: new Date().toISOString(),
@@ -476,7 +477,7 @@ function bindViewEvents() {
     profileForm.addEventListener("submit", (event) => {
       event.preventDefault();
       const formData = new FormData(profileForm);
-      state.data.businessName = formData.get("businessName").trim() || "Marshal";
+      state.data.businessName = formData.get("businessName").trim() || "Sherif";
       state.data.businessSubtitle = formData.get("businessSubtitle").trim() || "Rock N Water Landscapes";
       saveData();
       syncShell();
@@ -699,24 +700,11 @@ function renderSchedule() {
 }
 
 function renderMessages() {
-  const channels = state.data.channels;
-  const activeChannel = state.data.activeChannel;
-  const channel = channels.find((item) => item.id === activeChannel) || channels[0];
+  const channel = teamChannel;
   const messages = state.data.messages.filter((message) => message.channel === channel.id);
 
   return `
     <section class="messages-layout">
-      <div class="channel-list">
-        ${channels
-          .map(
-            (item) => `
-              <button class="channel-button ${item.id === activeChannel ? "active" : ""}" data-channel="${item.id}" type="button">
-                ${item.name}
-              </button>
-            `,
-          )
-          .join("")}
-      </div>
       <div class="thread">
         <div class="thread-head">
           <h2>${channel.name}</h2>
@@ -846,25 +834,6 @@ function renderSetup() {
       <section class="panel wide-panel">
         <div class="panel-head">
           <div>
-            <h2 class="panel-title">Message channels</h2>
-            <p class="panel-subtitle">Edit channel names or add a new team thread</p>
-          </div>
-        </div>
-        <div class="panel-body">
-          <form class="inline-form" id="channelForm">
-            <input name="name" type="text" placeholder="Channel name" aria-label="Channel name" />
-            <input name="description" type="text" placeholder="Channel description" aria-label="Channel description" />
-            <button class="primary-button" type="submit">Add</button>
-          </form>
-          <div class="config-list">
-            ${state.data.channels.map(renderChannelRow).join("")}
-          </div>
-        </div>
-      </section>
-
-      <section class="panel wide-panel">
-        <div class="panel-head">
-          <div>
             <h2 class="panel-title">Data backup</h2>
             <p class="panel-subtitle">Changes autosave in this browser; export a backup when you want a copy</p>
           </div>
@@ -883,13 +852,14 @@ function renderSetup() {
               <div class="panel-head">
                 <div>
                   <h2 class="panel-title">Login accounts</h2>
-                  <p class="panel-subtitle">Create email and password access for employees</p>
+                  <p class="panel-subtitle">Create invite links and send by email or SMS</p>
                 </div>
               </div>
               <div class="panel-body">
                 <form class="inline-form account-form" id="accountForm">
                   <input name="name" type="text" placeholder="Name" aria-label="Name" required />
                   <input name="email" type="email" placeholder="Email" aria-label="Email" required />
+                  <input name="phone" type="tel" placeholder="Phone" aria-label="Phone" />
                   <select name="role" aria-label="Role">
                     <option value="employee">Employee</option>
                     <option value="admin">Admin</option>
@@ -916,7 +886,7 @@ function renderPasswordPanel() {
       <div class="panel-head">
         <div>
           <h2 class="panel-title">Password</h2>
-          <p class="panel-subtitle">Change your Marshal sign-in password</p>
+          <p class="panel-subtitle">Change your Sherif sign-in password</p>
         </div>
       </div>
       <div class="panel-body">
@@ -936,7 +906,7 @@ function renderPhoneAlertsPanel() {
       <div class="panel-head">
         <div>
           <h2 class="panel-title">Phone app and alerts</h2>
-          <p class="panel-subtitle">Install Marshal on a phone and enable browser notifications</p>
+          <p class="panel-subtitle">Install Sherif on a phone and enable browser notifications</p>
         </div>
       </div>
       <div class="panel-body backup-actions">
@@ -1013,6 +983,7 @@ function renderCompactMessage(message) {
 
 function renderMessage(message) {
   const employee = findEmployee(message.employeeId);
+  const canDelete = isAdmin() || message.employeeId === state.data.currentUserId;
   return `
     <article class="message-item ${message.employeeId === state.data.currentUserId ? "own" : ""}">
       <div class="message-head">
@@ -1020,6 +991,13 @@ function renderMessage(message) {
         <span>${formatMessageDate(message.createdAt)}</span>
       </div>
       <p>${escapeHtml(message.body)}</p>
+      ${
+        canDelete
+          ? `<div class="message-actions">
+              <button class="mini-button" data-delete-message-id="${message.id}" type="button">Delete</button>
+            </div>`
+          : ""
+      }
     </article>
   `;
 }
@@ -1102,6 +1080,22 @@ function renderAreaRow(area) {
   `;
 }
 
+function deleteMessage(messageId) {
+  const message = state.data.messages.find((item) => item.id === messageId);
+  if (!message) return;
+  if (!isAdmin() && message.employeeId !== state.data.currentUserId) {
+    syncSaveStatus("You can only delete your own messages", true);
+    return;
+  }
+
+  if (typeof confirm === "function" && !confirm("Delete this message?")) return;
+  state.data.messages = state.data.messages.filter((item) => item.id !== messageId);
+  state.data.deletedMessageIds = Array.from(new Set([...(state.data.deletedMessageIds || []), messageId]));
+  saveData();
+  syncSaveStatus("Message deleted");
+  render();
+}
+
 function renderChannelRow(channel) {
   return `
     <form class="config-row channel-row" data-channel-form="${channel.id}">
@@ -1142,16 +1136,19 @@ function renderAccountRow(user) {
 
 function renderInviteRow(invite) {
   const inviteLink = buildInviteLink(invite.token);
+  const inviteStatus = invite.acceptedAt ? `Accepted ${formatMessageDate(invite.acceptedAt)}` : "Pending";
+  const inviteContact = `${escapeHtml(invite.email)}${invite.phone ? ` - ${escapeHtml(invite.phone)}` : ""}`;
   return `
     <div class="config-row account-row">
       <div>
         <strong>${escapeHtml(invite.name)}</strong>
-        <span>${escapeHtml(invite.email)} - ${invite.role} - ${invite.acceptedAt ? `Accepted ${formatMessageDate(invite.acceptedAt)}` : "Pending"}</span>
+        <span>${inviteContact} - ${invite.role} - ${inviteStatus}</span>
       </div>
       <input type="text" value="${escapeHtml(inviteLink)}" aria-label="Invite link for ${escapeHtml(invite.name)}" readonly />
       <div class="row-actions">
         <button class="ghost-button" data-invite-token="${invite.token}" type="button">Copy link</button>
         <button class="ghost-button" data-email-invite-id="${invite.id}" type="button">Email</button>
+        <button class="ghost-button" data-sms-invite-id="${invite.id}" type="button" ${invite.phone ? "" : "disabled"}>SMS</button>
         <button class="ghost-button" data-delete-invite-id="${invite.id}" type="button">Delete</button>
       </div>
     </div>
@@ -1422,17 +1419,17 @@ function syncAuthScreen() {
   authForm.elements.password.autocomplete = state.setupRequired || acceptingInvite ? "new-password" : "current-password";
   authTitle.textContent = acceptingInvite ? "Create your account" : state.setupRequired ? "Create owner account" : "Sign in";
   authIntro.textContent = acceptingInvite
-    ? "Choose your Marshal password to accept the invite."
+    ? "Choose your Sherif password to accept the invite."
     : state.setupRequired
-      ? "Create the first admin account for Marshal."
-      : "Use your Marshal email and password.";
+      ? "Create the first admin account for Sherif."
+      : "Use your Sherif email and password.";
   authSubmitButton.textContent = acceptingInvite || state.setupRequired ? "Create account" : "Sign in";
 }
 
 async function initAuth() {
   if (!canUseCloudSync()) {
     state.setupRequired = false;
-    authError.textContent = "Sign in works after Marshal is deployed to Netlify over HTTPS.";
+    authError.textContent = "Sign in works after Sherif is deployed to Netlify over HTTPS.";
     syncAuthScreen();
     return;
   }
@@ -1570,6 +1567,7 @@ async function createAccount(event) {
         action: "create-invite",
         name: formData.get("name"),
         email: formData.get("email"),
+        phone: formData.get("phone"),
         role: formData.get("role"),
       },
       "POST",
@@ -1687,6 +1685,20 @@ async function emailInviteLink(inviteId) {
   });
 }
 
+async function smsInviteLink(inviteId) {
+  const invite = state.authInvites.find((item) => item.id === inviteId);
+  if (!invite?.phone) {
+    syncSaveStatus("Add a phone number before sending SMS", true);
+    return;
+  }
+
+  const message = buildStaffInviteBody(invite.name, invite.email, buildInviteLink(invite.token));
+  await copyText(message);
+  const separator = /iPad|iPhone|iPod/i.test(navigator.userAgent) ? "&" : "?";
+  window.location.href = `sms:${encodeURIComponent(invite.phone)}${separator}body=${encodeURIComponent(message)}`;
+  syncSaveStatus(`SMS invite ready for ${invite.name}`);
+}
+
 function buildInviteLink(token) {
   return `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(token)}`;
 }
@@ -1694,9 +1706,9 @@ function buildInviteLink(token) {
 function buildStaffInviteBody(name, email, inviteLink) {
   return `Hi ${name},
 
-You have been invited to use Marshal for Rock N Water Landscapes schedules and messages.
+You have been invited to use Sherif for Rock N Water Landscapes schedules and messages.
 
-Open Marshal here:
+Open Sherif here:
 ${inviteLink}
 
 Use this email address to sign in:
@@ -1710,9 +1722,9 @@ Thanks`;
 function buildLoginInviteBody(name, email) {
   return `Hi ${name},
 
-You have been invited to use Marshal for Rock N Water Landscapes schedules and messages.
+You have been invited to use Sherif for Rock N Water Landscapes schedules and messages.
 
-Open Marshal here:
+Open Sherif here:
 ${window.location.origin}
 
 Sign in with this email address:
@@ -1725,7 +1737,7 @@ Thanks`;
 
 async function sendInvite({ email, name, body }) {
   const copied = await copyText(body);
-  const subject = encodeURIComponent("Your Marshal app invite");
+  const subject = encodeURIComponent("Your Sherif app invite");
   const encodedBody = encodeURIComponent(body);
   const mailtoUrl = `mailto:${encodeURIComponent(email)}?subject=${subject}&body=${encodedBody}`;
   const link = document.createElement("a");
@@ -1886,7 +1898,7 @@ async function requestNotifications() {
   if (permission === "granted") {
     await registerPushSubscription();
     sendUpcomingShiftReminder();
-    notifyTeam("Marshal notifications enabled", "This device can receive Marshal alerts.", true);
+    notifyTeam("Sherif notifications enabled", "This device can receive Sherif alerts.", true);
   } else {
     syncSaveStatus("Notifications not enabled");
   }
@@ -2254,7 +2266,7 @@ function exportBackup() {
   const backup = {
     version: 1,
     exportedAt: new Date().toISOString(),
-    app: "Marshal",
+    app: "Sherif",
     data: state.data,
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
@@ -2301,12 +2313,15 @@ function normalizeData(data) {
   };
 
   merged.employees = Array.isArray(data.employees) ? data.employees : defaults.employees;
-  merged.channels = Array.isArray(data.channels) && data.channels.length ? data.channels : defaults.channels;
+  merged.channels = [teamChannel];
   merged.shifts = Array.isArray(data.shifts) ? data.shifts : defaults.shifts;
-  merged.messages = Array.isArray(data.messages) ? data.messages : defaults.messages;
+  merged.deletedMessageIds = Array.isArray(data.deletedMessageIds) ? data.deletedMessageIds : [];
+  merged.messages = (Array.isArray(data.messages) ? data.messages : defaults.messages)
+    .filter((message) => !merged.deletedMessageIds.includes(message.id))
+    .map((message) => ({ ...message, channel: teamChannel.id }));
   merged.requests = Array.isArray(data.requests) ? data.requests : defaults.requests;
   merged.areas = Array.isArray(data.areas) && data.areas.length ? data.areas : inferAreas(merged, defaults.areas);
-  merged.businessName = !data.businessName || data.businessName === "ShiftLink" ? defaults.businessName : data.businessName;
+  merged.businessName = !data.businessName || data.businessName === "ShiftLink" || data.businessName === "Marshal" ? defaults.businessName : data.businessName;
   merged.businessSubtitle =
     !data.businessSubtitle || data.businessSubtitle === "Business workforce" ? defaults.businessSubtitle : data.businessSubtitle;
   merged.appInstalled = Boolean(data.appInstalled);
@@ -2328,9 +2343,7 @@ function normalizeData(data) {
     published: typeof shift.published === "boolean" ? shift.published : shift.status === "Confirmed",
   }));
 
-  if (!merged.channels.some((channel) => channel.id === merged.activeChannel)) {
-    merged.activeChannel = merged.channels[0].id;
-  }
+  merged.activeChannel = teamChannel.id;
 
   if (!merged.employees.some((employee) => employee.id === merged.currentUserId)) {
     merged.currentUserId = merged.employees[0]?.id || null;
@@ -2343,33 +2356,18 @@ function createSeedData() {
   const areas = ["General", "Landscaping", "Maintenance", "Construction", "Admin"];
 
   return {
-    businessName: "Marshal",
+    businessName: "Sherif",
     businessSubtitle: "Rock N Water Landscapes",
     appInstalled: false,
     notificationsEnabled: false,
     currentUserId: null,
-    activeChannel: "ops",
+    activeChannel: teamChannel.id,
     areas,
     employees: [],
-    channels: [
-      {
-        id: "announcements",
-        name: "Announcements",
-        description: "Company-wide updates and policy notes",
-      },
-      {
-        id: "ops",
-        name: "Operations",
-        description: "Daily handover and shift coordination",
-      },
-      {
-        id: "managers",
-        name: "Managers",
-        description: "Roster, coverage, and approval discussion",
-      },
-    ],
+    channels: [teamChannel],
     shifts: [],
     messages: [],
+    deletedMessageIds: [],
     requests: [],
   };
 }
@@ -2379,7 +2377,7 @@ function getCurrentUser() {
 }
 
 function getActiveChannel() {
-  return state.data.channels.find((channel) => channel.id === state.data.activeChannel) || state.data.channels[0];
+  return teamChannel;
 }
 
 function findEmployee(employeeId) {

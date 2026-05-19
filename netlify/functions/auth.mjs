@@ -184,6 +184,7 @@ async function createInvite(store, body, currentUser) {
     token: crypto.randomBytes(24).toString("hex"),
     name,
     email,
+    phone: String(body.phone || "").trim(),
     role: body.role === "admin" ? "admin" : "employee",
     createdAt: new Date().toISOString(),
     createdBy: currentUser.id,
@@ -205,6 +206,7 @@ async function getInvite(store, token) {
     invite: {
       name: invite.name,
       email: invite.email,
+      phone: invite.phone || "",
       role: invite.role,
       acceptedAt: invite.acceptedAt,
     },
@@ -273,22 +275,15 @@ async function upsertEmployeeFromInvite(store, invite, body) {
   }
 
   const nextData = {
-    businessName: data.businessName || "Marshal",
+    businessName: !data.businessName || data.businessName === "Marshal" ? "Sherif" : data.businessName,
     businessSubtitle: data.businessSubtitle || "Rock N Water Landscapes",
     appInstalled: Boolean(data.appInstalled),
     notificationsEnabled: Boolean(data.notificationsEnabled),
     currentUserId: data.currentUserId || employee.id,
-    activeChannel: data.activeChannel || "ops",
+    activeChannel: "team",
     areas: Array.isArray(data.areas) && data.areas.length ? data.areas : ["General", "Landscaping", "Maintenance", "Construction", "Admin"],
     employees,
-    channels:
-      Array.isArray(data.channels) && data.channels.length
-        ? data.channels
-        : [
-            { id: "announcements", name: "Announcements", description: "Company-wide updates and policy notes" },
-            { id: "ops", name: "Operations", description: "Daily handover and shift coordination" },
-            { id: "managers", name: "Managers", description: "Roster, coverage, and approval discussion" },
-          ],
+    channels: [{ id: "team", name: "Team", description: "Company messages and daily updates" }],
     shifts: Array.isArray(data.shifts) ? data.shifts : [],
     messages: Array.isArray(data.messages) ? data.messages : [],
     requests: Array.isArray(data.requests) ? data.requests : [],
@@ -311,7 +306,7 @@ function normalizeInitials(initials, name) {
 }
 
 function colorForText(text) {
-  const palette = ["#276ef1", "#087f72", "#b42318", "#9a6700", "#7c3aed", "#0f766e", "#c2410c", "#be123c"];
+  const palette = ["#a33a24", "#087aa3", "#d84a2a", "#211a17", "#0f766e", "#9a6700", "#7c3aed", "#be123c"];
   const value = String(text || "");
   let hash = 0;
   for (let index = 0; index < value.length; index += 1) {
@@ -463,6 +458,7 @@ function publicInvite(invite) {
     token: invite.token,
     name: invite.name,
     email: invite.email,
+    phone: invite.phone || "",
     role: invite.role,
     createdAt: invite.createdAt,
     acceptedAt: invite.acceptedAt,

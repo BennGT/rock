@@ -52,7 +52,7 @@ export default async function handler(request) {
       webpush.setVapidDetails(subject, publicKey, privateKey);
       const subscriptions = await getSubscriptions(store);
       const message = JSON.stringify({
-        title: String(body.title || "Marshal"),
+        title: String(body.title || "Sherif"),
         body: String(body.body || ""),
         url: "/",
       });

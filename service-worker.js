@@ -1,4 +1,4 @@
-const cacheName = "marshal-app-v14";
+const cacheName = "sherif-app-v15";
 const appShell = [
   "./",
   "./index.html",
@@ -66,7 +66,7 @@ self.addEventListener("notificationclick", (event) => {
 
 self.addEventListener("push", (event) => {
   const payload = event.data?.json?.() || {};
-  const title = payload.title || "Marshal";
+  const title = payload.title || "Sherif";
   const options = {
     body: payload.body || "",
     icon: "assets/marshal-icon-192.png",
