@@ -877,7 +877,7 @@ function renderSetup() {
               <div class="panel-body">
                 <form class="inline-form account-form" id="accountForm" autocomplete="off">
                   <input name="inviteName" type="text" placeholder="Employee name" aria-label="Employee name" autocomplete="off" value="${escapeHtml(state.inviteDraft.name)}" required />
-                  <input name="inviteEmail" type="email" placeholder="Employee email" aria-label="Employee email" autocomplete="off" inputmode="email" value="${escapeHtml(state.inviteDraft.email)}" required />
+                  <input name="inviteEmail" type="email" placeholder="Employee email" aria-label="Employee email" autocomplete="off" inputmode="email" value="${escapeHtml(state.inviteDraft.email)}" />
                   <input name="invitePhone" type="tel" placeholder="Employee phone" aria-label="Employee phone" autocomplete="off" inputmode="tel" value="${escapeHtml(state.inviteDraft.phone)}" />
                   <select name="inviteRole" aria-label="Role" autocomplete="off">
                     <option value="employee" ${state.inviteDraft.role === "employee" ? "selected" : ""}>Employee</option>
@@ -1579,14 +1579,21 @@ async function signOut() {
 async function createAccount(event) {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
+  const inviteEmail = String(formData.get("inviteEmail") || "").trim();
+  const invitePhone = String(formData.get("invitePhone") || "").trim();
+
+  if (!inviteEmail && !invitePhone) {
+    syncSaveStatus("Add an email or phone number for the invite", true);
+    return;
+  }
 
   try {
     const payload = await authRequest(
       {
         action: "create-invite",
         name: formData.get("inviteName"),
-        email: formData.get("inviteEmail"),
-        phone: formData.get("invitePhone"),
+        email: inviteEmail,
+        phone: invitePhone,
         role: formData.get("inviteRole"),
       },
       "POST",

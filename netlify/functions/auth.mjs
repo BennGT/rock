@@ -168,15 +168,17 @@ async function createInvite(store, body, currentUser) {
   const users = await getUsers(store);
   const invites = await getInvites(store);
   const email = normalizeEmail(body.email);
+  const phone = String(body.phone || "").trim();
   const name = String(body.name || "").trim();
 
   if (!name) throw new Error("Name is required");
-  if (!email.includes("@")) throw new Error("Valid email is required");
-  if (users.some((user) => user.email === email)) {
+  if (!email && !phone) throw new Error("Email or phone is required");
+  if (email && !email.includes("@")) throw new Error("Valid email is required");
+  if (email && users.some((user) => user.email === email)) {
     return json(409, { error: "A login account already exists for this email" });
   }
 
-  const pendingInvite = invites.find((invite) => invite.email === email && !invite.acceptedAt);
+  const pendingInvite = invites.find((invite) => !invite.acceptedAt && ((email && invite.email === email) || (phone && invite.phone === phone)));
   if (pendingInvite) return json(200, { invite: publicInvite(pendingInvite), invites: publicInvites(invites) });
 
   const invite = {
@@ -184,7 +186,7 @@ async function createInvite(store, body, currentUser) {
     token: crypto.randomBytes(24).toString("hex"),
     name,
     email,
-    phone: String(body.phone || "").trim(),
+    phone,
     role: body.role === "admin" ? "admin" : "employee",
     createdAt: new Date().toISOString(),
     createdBy: currentUser.id,
@@ -221,7 +223,8 @@ async function acceptInvite(store, dataStore, body) {
 
   const users = await getUsers(store);
   const email = normalizeEmail(body.email || invite.email);
-  if (email !== invite.email) return json(400, { error: "Use the email address from the invite" });
+  if (!email.includes("@")) return json(400, { error: "Valid email is required" });
+  if (invite.email && email !== invite.email) return json(400, { error: "Use the email address from the invite" });
   if (users.some((user) => user.email === email)) {
     return json(409, { error: "A login account already exists for this email" });
   }
