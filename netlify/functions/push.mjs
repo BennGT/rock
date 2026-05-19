@@ -47,7 +47,6 @@ export default async function handler(request) {
     }
 
     if (body.action === "notify") {
-      if (user.role !== "admin") return json(403, { error: "Admin access required" });
       if (!publicKey || !privateKey) return json(400, { error: "Push notifications are not configured" });
 
       webpush.setVapidDetails(subject, publicKey, privateKey);

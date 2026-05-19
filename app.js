@@ -1,5 +1,6 @@
 const storageKey = "marshal-data-v1";
 const authTokenKey = "marshal-auth-token";
+const shiftReminderKey = "marshal-shift-reminders";
 const legacyStorageKeys = ["shiftlink-demo-v1"];
 const cloudApiPath = "/.netlify/functions/data";
 const authApiPath = "/.netlify/functions/auth";
@@ -8,17 +9,22 @@ const pushApiPath = "/.netlify/functions/push";
 const state = {
   view: "dashboard",
   weekStart: startOfWeek(new Date()),
+  scheduleEmployeeFilterId: "all",
   editingShiftId: null,
   editingEmployeeId: null,
   copiedShift: null,
   deferredInstallPrompt: null,
   cloudStatus: "local",
   cloudSaveTimer: null,
+  cloudRefreshTimer: null,
   pushPublicKey: null,
+  inviteToken: typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("invite") : null,
+  inviteDetails: null,
   localChangedDuringCloudLoad: false,
   authToken: localStorage.getItem(authTokenKey),
   authUser: null,
   authUsers: [],
+  authInvites: [],
   setupRequired: false,
   data: loadData(),
 };
@@ -47,7 +53,6 @@ const todayLabel = document.querySelector("#todayLabel");
 const brandFallback = document.querySelector("#brandFallback");
 const brandName = document.querySelector("#brandName");
 const brandSubtitle = document.querySelector("#brandSubtitle");
-const userSelect = document.querySelector("#userSelect");
 const saveStatus = document.querySelector("#saveStatus");
 const accountStatus = document.querySelector("#accountStatus");
 const signOutButton = document.querySelector("#signOutButton");
@@ -76,7 +81,7 @@ function init() {
   syncSaveStatus();
   syncInstallButton();
   syncNotificationButton();
-  hydrateUserSelect();
+  syncCurrentEmployeeFromAuth();
   registerServiceWorker();
   bindChrome();
   render();
@@ -88,12 +93,6 @@ function bindChrome() {
     const tab = event.target.closest("[data-view]");
     if (!tab) return;
     state.view = tab.dataset.view;
-    render();
-  });
-
-  userSelect.addEventListener("change", () => {
-    state.data.currentUserId = userSelect.value || null;
-    saveData();
     render();
   });
 
@@ -295,6 +294,21 @@ function bindViewEvents() {
     });
   });
 
+  appView.querySelectorAll("[data-schedule-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.scheduleEmployeeFilterId = button.dataset.scheduleFilter;
+      render();
+    });
+  });
+
+  appView.querySelectorAll("[data-view-employee-schedule]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.scheduleEmployeeFilterId = button.dataset.viewEmployeeSchedule;
+      state.view = "schedule";
+      render();
+    });
+  });
+
   appView.querySelectorAll("[data-channel]").forEach((button) => {
     button.addEventListener("click", () => {
       state.data.activeChannel = button.dataset.channel;
@@ -333,6 +347,10 @@ function bindViewEvents() {
 
   appView.querySelectorAll("[data-invite-account-id]").forEach((button) => {
     button.addEventListener("click", () => inviteAccount(button.dataset.inviteAccountId));
+  });
+
+  appView.querySelectorAll("[data-invite-token]").forEach((button) => {
+    button.addEventListener("click", () => copyInviteLink(button.dataset.inviteToken));
   });
 
   appView.querySelectorAll("[data-reset-password-form]").forEach((form) => {
@@ -414,7 +432,7 @@ function bindViewEvents() {
       });
       input.value = "";
       saveData();
-      notifyTeam(`New message in ${getActiveChannel().name}`, text, false, isAdmin());
+      notifyTeam(`New message in ${getActiveChannel().name}`, text, false, true);
       render();
     });
   }
@@ -592,6 +610,7 @@ function renderSchedule() {
   const rangeLabel = `${formatDateShort(days[0])} to ${formatDateShort(days[6])}`;
   const copiedEmployee = state.copiedShift ? findEmployee(state.copiedShift.employeeId) : null;
   const unpublishedCount = weekShifts().filter((shift) => !shift.published).length;
+  const selectedEmployee = state.scheduleEmployeeFilterId !== "all" ? findEmployee(state.scheduleEmployeeFilterId) : null;
 
   return `
     <div class="schedule-layout">
@@ -610,6 +629,22 @@ function renderSchedule() {
             : ""
         }
       </div>
+
+      ${
+        isAdmin()
+          ? `<div class="filter-strip" aria-label="Schedule staff filter">
+              <button class="mini-button ${state.scheduleEmployeeFilterId === "all" ? "active" : ""}" data-schedule-filter="all" type="button">All staff</button>
+              ${state.data.employees
+                .map(
+                  (employee) =>
+                    `<button class="mini-button ${state.scheduleEmployeeFilterId === employee.id ? "active" : ""}" data-schedule-filter="${employee.id}" type="button">${employee.name}</button>`,
+                )
+                .join("")}
+            </div>`
+          : selectedEmployee
+            ? `<div class="copy-banner">Showing ${selectedEmployee.name}'s published shifts.</div>`
+            : ""
+      }
 
       ${
         state.copiedShift && isAdmin()
@@ -846,13 +881,15 @@ function renderSetup() {
                 <form class="inline-form account-form" id="accountForm">
                   <input name="name" type="text" placeholder="Name" aria-label="Name" required />
                   <input name="email" type="email" placeholder="Email" aria-label="Email" required />
-                  <input name="password" type="password" placeholder="Password" aria-label="Password" minlength="8" required />
                   <select name="role" aria-label="Role">
                     <option value="employee">Employee</option>
                     <option value="admin">Admin</option>
                   </select>
-                  <button class="primary-button" type="submit">Add account</button>
+                  <button class="primary-button" type="submit">Create invite</button>
                 </form>
+                <div class="section-gap config-list">
+                  ${state.authInvites.length ? state.authInvites.map(renderInviteRow).join("") : `<div class="empty-state">No invitations yet.</div>`}
+                </div>
                 <div class="config-list">
                   ${state.authUsers.length ? state.authUsers.map(renderAccountRow).join("") : `<div class="empty-state">No login accounts loaded.</div>`}
                 </div>
@@ -1033,6 +1070,7 @@ function renderStaffItem(employee) {
         isAdmin()
           ? `<div class="staff-actions">
               <button class="ghost-button" data-invite-employee-id="${employee.id}" type="button" ${employee.email ? "" : "disabled"}>Invite</button>
+              <button class="ghost-button" data-view-employee-schedule="${employee.id}" type="button">View shifts</button>
               <button class="ghost-button" data-employee-id="${employee.id}" type="button">Edit</button>
             </div>`
           : ""
@@ -1088,6 +1126,22 @@ function renderAccountRow(user) {
       <div class="row-actions">
         <button class="ghost-button" data-invite-account-id="${user.id}" type="button">Invite</button>
         <button class="ghost-button" data-delete-account-id="${user.id}" type="button" ${user.id === state.authUser?.id ? "disabled" : ""}>Remove</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderInviteRow(invite) {
+  const inviteLink = buildInviteLink(invite.token);
+  return `
+    <div class="config-row account-row">
+      <div>
+        <strong>${escapeHtml(invite.name)}</strong>
+        <span>${escapeHtml(invite.email)} - ${invite.role} - ${invite.acceptedAt ? `Accepted ${formatMessageDate(invite.acceptedAt)}` : "Pending"}</span>
+      </div>
+      <input type="text" value="${escapeHtml(inviteLink)}" aria-label="Invite link for ${escapeHtml(invite.name)}" readonly />
+      <div class="row-actions">
+        <button class="ghost-button" data-invite-token="${invite.token}" type="button">Copy link</button>
       </div>
     </div>
   `;
@@ -1267,11 +1321,27 @@ async function inviteEmployee(employeeId) {
     return;
   }
 
-  await sendInvite({
-    email: employee.email,
-    name: employee.name,
-    body: buildStaffInviteBody(employee.name, employee.email),
-  });
+  try {
+    const payload = await authRequest(
+      {
+        action: "create-invite",
+        name: employee.name,
+        email: employee.email,
+        role: "employee",
+      },
+      "POST",
+    );
+    state.authInvites = payload.invites || state.authInvites;
+    const inviteLink = buildInviteLink(payload.invite.token);
+    await sendInvite({
+      email: employee.email,
+      name: employee.name,
+      body: buildStaffInviteBody(employee.name, employee.email, inviteLink),
+    });
+    render();
+  } catch (error) {
+    syncSaveStatus(error.message || "Could not create invite", true);
+  }
 }
 
 function closeEmployeeModal() {
@@ -1327,14 +1397,20 @@ function syncAuthScreen() {
 
   if (signedIn) return;
 
-  authNameField.classList.toggle("hidden", !state.setupRequired);
-  authForm.elements.name.required = state.setupRequired;
-  authForm.elements.password.autocomplete = state.setupRequired ? "new-password" : "current-password";
-  authTitle.textContent = state.setupRequired ? "Create owner account" : "Sign in";
-  authIntro.textContent = state.setupRequired
-    ? "Create the first admin account for Marshal."
-    : "Use your Marshal email and password.";
-  authSubmitButton.textContent = state.setupRequired ? "Create account" : "Sign in";
+  const acceptingInvite = Boolean(state.inviteToken);
+  authNameField.classList.toggle("hidden", !state.setupRequired && !acceptingInvite);
+  authForm.elements.name.required = state.setupRequired || acceptingInvite;
+  authForm.elements.email.readOnly = acceptingInvite && Boolean(state.inviteDetails?.email);
+  authForm.elements.email.value = acceptingInvite && state.inviteDetails?.email ? state.inviteDetails.email : authForm.elements.email.value;
+  authForm.elements.name.value = acceptingInvite && state.inviteDetails?.name ? state.inviteDetails.name : authForm.elements.name.value;
+  authForm.elements.password.autocomplete = state.setupRequired || acceptingInvite ? "new-password" : "current-password";
+  authTitle.textContent = acceptingInvite ? "Create your account" : state.setupRequired ? "Create owner account" : "Sign in";
+  authIntro.textContent = acceptingInvite
+    ? "Choose your Marshal password to accept the invite."
+    : state.setupRequired
+      ? "Create the first admin account for Marshal."
+      : "Use your Marshal email and password.";
+  authSubmitButton.textContent = acceptingInvite || state.setupRequired ? "Create account" : "Sign in";
 }
 
 async function initAuth() {
@@ -1346,10 +1422,15 @@ async function initAuth() {
   }
 
   try {
+    if (state.inviteToken) {
+      await loadInviteDetails();
+    }
+
     const payload = await authRequest(null, "GET");
     state.authUser = payload.user || null;
     state.setupRequired = Boolean(payload.setupRequired);
     state.authUsers = payload.users || [];
+    state.authInvites = payload.invites || [];
     if (!state.authUser && state.authToken) {
       state.authToken = null;
       localStorage.removeItem(authTokenKey);
@@ -1358,6 +1439,7 @@ async function initAuth() {
     if (state.authUser) {
       syncAuthScreen();
       loadCloudData();
+      startCloudRefresh();
     } else {
       syncAuthScreen();
     }
@@ -1370,6 +1452,19 @@ async function initAuth() {
   }
 }
 
+async function loadInviteDetails() {
+  if (!state.inviteToken) return;
+
+  const response = await fetch(`${authApiPath}?invite=${encodeURIComponent(state.inviteToken)}`, {
+    method: "GET",
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || "Invite link could not be loaded");
+  state.inviteDetails = payload.invite || null;
+}
+
 async function submitAuth(event) {
   event.preventDefault();
   authError.textContent = "";
@@ -1377,10 +1472,11 @@ async function submitAuth(event) {
 
   try {
     const formData = new FormData(authForm);
-    const action = state.setupRequired ? "setup" : "login";
+    const action = state.inviteToken ? "accept-invite" : state.setupRequired ? "setup" : "login";
     const payload = await authRequest(
       {
         action,
+        token: state.inviteToken,
         name: formData.get("name"),
         email: formData.get("email"),
         password: formData.get("password"),
@@ -1391,12 +1487,19 @@ async function submitAuth(event) {
     state.authToken = payload.token;
     state.authUser = payload.user;
     state.authUsers = payload.users || [];
+    state.authInvites = payload.invites || [];
     state.setupRequired = false;
+    if (state.inviteToken && typeof window !== "undefined") {
+      state.inviteToken = null;
+      state.inviteDetails = null;
+      window.history.replaceState({}, "", window.location.pathname);
+    }
     localStorage.setItem(authTokenKey, state.authToken);
     authForm.reset();
     syncAuthScreen();
     syncSaveStatus("Signed in");
     loadCloudData();
+    startCloudRefresh();
   } catch (error) {
     authError.textContent = error.message || "Sign in failed";
   } finally {
@@ -1416,6 +1519,8 @@ async function signOut() {
   state.authToken = null;
   state.authUser = null;
   state.authUsers = [];
+  state.authInvites = [];
+  stopCloudRefresh();
   localStorage.removeItem(authTokenKey);
   state.cloudStatus = "local";
   syncSaveStatus("Signed out");
@@ -1429,21 +1534,23 @@ async function createAccount(event) {
   try {
     const payload = await authRequest(
       {
-        action: "create-user",
+        action: "create-invite",
         name: formData.get("name"),
         email: formData.get("email"),
-        password: formData.get("password"),
         role: formData.get("role"),
       },
       "POST",
     );
 
-    state.authUsers = payload.users || [];
+    state.authInvites = payload.invites || [];
     event.currentTarget.reset();
-    syncSaveStatus("Login account added");
+    if (payload.invite?.token) {
+      await copyText(buildInviteLink(payload.invite.token));
+    }
+    syncSaveStatus("Invite link created and copied");
     render();
   } catch (error) {
-    syncSaveStatus(error.message || "Could not add account", true);
+    syncSaveStatus(error.message || "Could not create invite", true);
   }
 }
 
@@ -1516,18 +1623,27 @@ async function inviteAccount(userId) {
   });
 }
 
-function buildStaffInviteBody(name, email) {
+async function copyInviteLink(token) {
+  const copied = await copyText(buildInviteLink(token));
+  syncSaveStatus(copied ? "Invite link copied" : "Could not copy invite link", !copied);
+}
+
+function buildInviteLink(token) {
+  return `${window.location.origin}${window.location.pathname}?invite=${encodeURIComponent(token)}`;
+}
+
+function buildStaffInviteBody(name, email, inviteLink) {
   return `Hi ${name},
 
 You have been invited to use Marshal for Rock N Water Landscapes schedules and messages.
 
 Open Marshal here:
-${window.location.origin}
+${inviteLink}
 
 Use this email address to sign in:
 ${email}
 
-If you do not have a password yet, ask your manager to create your login in Marshal under Setup > Login accounts.
+Choose your password when the invite link opens.
 
 Thanks`;
 }
@@ -1710,6 +1826,7 @@ async function requestNotifications() {
 
   if (permission === "granted") {
     await registerPushSubscription();
+    sendUpcomingShiftReminder();
     notifyTeam("Marshal notifications enabled", "This device can receive Marshal alerts.", true);
   } else {
     syncSaveStatus("Notifications not enabled");
@@ -1740,6 +1857,37 @@ function notifyTeam(title, body, force = false, sendPush = false) {
   }
 
   new window.Notification(title, options);
+}
+
+function sendUpcomingShiftReminder() {
+  if (!state.data.notificationsEnabled || !state.data.currentUserId) return;
+
+  const now = new Date();
+  const reminderWindow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+  const nextShift = state.data.shifts
+    .filter((shift) => shift.employeeId === state.data.currentUserId && shift.published)
+    .map((shift) => ({ ...shift, startsAt: new Date(`${shift.date}T${shift.start || "00:00"}`) }))
+    .filter((shift) => shift.startsAt > now && shift.startsAt <= reminderWindow)
+    .sort((a, b) => a.startsAt - b.startsAt)[0];
+
+  if (!nextShift) return;
+
+  const reminderId = `${nextShift.id}:${nextShift.date}:${nextShift.start}`;
+  const reminders = loadReminderIds();
+  if (reminders.includes(reminderId)) return;
+
+  reminders.push(reminderId);
+  localStorage.setItem(shiftReminderKey, JSON.stringify(reminders.slice(-100)));
+  notifyTeam("Upcoming shift", `${nextShift.area}, ${formatDateShort(parseDateKey(nextShift.date))}, ${nextShift.start} to ${nextShift.end}`, true);
+}
+
+function loadReminderIds() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(shiftReminderKey) || "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 async function registerPushSubscription() {
@@ -1836,13 +1984,6 @@ function hydrateUserSelect() {
   if (!state.data.employees.some((employee) => employee.id === state.data.currentUserId)) {
     state.data.currentUserId = state.data.employees[0]?.id || null;
   }
-
-  const employees = isAdmin() ? state.data.employees : state.data.employees.filter((employee) => employee.id === state.data.currentUserId);
-  userSelect.disabled = !isAdmin() || !employees.length;
-  userSelect.innerHTML = employees.length
-    ? employees.map((employee) => `<option value="${employee.id}">${employee.name}</option>`).join("")
-    : `<option value="">Add employees first</option>`;
-  userSelect.value = state.data.currentUserId || "";
 }
 
 function loadData() {
@@ -1885,7 +2026,7 @@ function saveData(options = {}) {
   }
 }
 
-async function loadCloudData() {
+async function loadCloudData(options = {}) {
   if (!state.authToken) {
     state.cloudStatus = "local";
     syncSaveStatus();
@@ -1898,8 +2039,10 @@ async function loadCloudData() {
     return;
   }
 
-  state.cloudStatus = "loading";
-  syncSaveStatus();
+  if (!options.silent) {
+    state.cloudStatus = "loading";
+    syncSaveStatus();
+  }
 
   try {
     const response = await fetch(cloudApiPath, {
@@ -1933,7 +2076,7 @@ async function loadCloudData() {
       render();
       state.cloudStatus = "synced";
       state.localChangedDuringCloudLoad = false;
-      syncSaveStatus("Loaded shared data");
+      syncSaveStatus(options.silent ? null : "Loaded shared data");
       return;
     }
 
@@ -1943,6 +2086,23 @@ async function loadCloudData() {
     syncSaveStatus();
     console.error(error);
   }
+}
+
+function startCloudRefresh() {
+  stopCloudRefresh();
+  if (!state.authToken || !canUseCloudSync()) return;
+
+  state.cloudRefreshTimer = setInterval(() => {
+    if (state.cloudStatus === "syncing" || state.cloudStatus === "loading") return;
+    loadCloudData({ silent: true });
+    refreshAuthLists();
+    sendUpcomingShiftReminder();
+  }, 15000);
+}
+
+function stopCloudRefresh() {
+  if (state.cloudRefreshTimer) clearInterval(state.cloudRefreshTimer);
+  state.cloudRefreshTimer = null;
 }
 
 function queueCloudSave() {
@@ -1998,10 +2158,24 @@ async function handleAuthExpired() {
   state.authToken = null;
   state.authUser = null;
   state.authUsers = [];
+  state.authInvites = [];
   localStorage.removeItem(authTokenKey);
   state.cloudStatus = "local";
   syncSaveStatus("Session expired", true);
   await initAuth();
+}
+
+async function refreshAuthLists() {
+  if (!isAdmin()) return;
+
+  try {
+    const payload = await authRequest(null, "GET");
+    state.authUsers = payload.users || state.authUsers;
+    state.authInvites = payload.invites || state.authInvites;
+    if (state.view === "setup") render();
+  } catch (error) {
+    console.error(error);
+  }
 }
 
 function canUseCloudSync() {
@@ -2192,6 +2366,7 @@ function shiftsForDate(dateKey) {
   return state.data.shifts
     .filter((shift) => shift.date === dateKey)
     .filter(canSeeShift)
+    .filter((shift) => state.scheduleEmployeeFilterId === "all" || shift.employeeId === state.scheduleEmployeeFilterId)
     .sort((a, b) => a.start.localeCompare(b.start));
 }
 

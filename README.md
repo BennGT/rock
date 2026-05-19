@@ -21,7 +21,8 @@ Open `index.html` in a browser to run it locally. When hosted on Netlify with Fu
 - Admin and employee permissions, with employees limited to their published shifts, messages, and own requests.
 - Published schedule workflow so draft roster changes stay hidden until an admin publishes them.
 - Password change and admin password reset.
-- Email invite actions that copy the invite text and open a ready-to-send email in your email app.
+- Invite links that let employees choose their own password, with pending/accepted status visible to admins.
+- Individual staff schedule filtering from the Schedule page or each Staff card.
 - Optional Web Push notification support through Netlify Functions.
 
 ## Phone install and notifications
@@ -65,7 +66,7 @@ Manual folder upload can show the app, but shared PC-to-phone saving may not wor
 
 On the first hosted visit, Marshal asks you to create the owner account. After that, everyone must sign in with email and password.
 
-The owner/admin can create employee login accounts from **Setup > Login accounts**. Passwords are hashed in the Netlify Function before being stored. Staff can change their own password from **Setup > Password**, and admins can reset passwords from **Setup > Login accounts**.
+The owner/admin can create invite links from **Setup > Login accounts**. Staff use the invite link to choose their own password. Passwords are hashed in the Netlify Function before being stored. Staff can change their own password from **Setup > Password**, and admins can reset passwords from **Setup > Login accounts**.
 
 Use the same email address for the employee's login account and their Staff profile. That link lets Marshal show employees only their published shifts and their own requests.
 

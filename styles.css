@@ -609,6 +609,12 @@ h3 {
   font-weight: 800;
 }
 
+.filter-strip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .week-grid {
   display: grid;
   grid-template-columns: repeat(7, minmax(160px, 1fr));
@@ -658,6 +664,12 @@ h3 {
   color: var(--accent);
   font-size: 12px;
   font-weight: 900;
+}
+
+.mini-button.active {
+  background: #101820;
+  border-color: #101820;
+  color: #ffffff;
 }
 
 .day-column.today {
@@ -786,7 +798,7 @@ h3 {
 }
 
 .account-form {
-  grid-template-columns: minmax(150px, 0.7fr) minmax(190px, 1fr) minmax(150px, 0.7fr) minmax(120px, 0.4fr) auto;
+  grid-template-columns: minmax(150px, 0.7fr) minmax(220px, 1fr) minmax(120px, 0.4fr) auto;
 }
 
 .password-form {

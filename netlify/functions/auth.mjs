@@ -15,15 +15,23 @@ export default async function handler(request) {
     }
 
     const store = getMarshalStore("marshal-auth");
+    const url = new URL(request.url);
 
     if (request.method === "GET") {
+      const inviteToken = url.searchParams.get("invite");
+      if (inviteToken) {
+        return getInvite(store, inviteToken);
+      }
+
       const users = await getUsers(store);
+      const invites = await getInvites(store);
       const user = await getAuthenticatedUser(store, request.headers.get("authorization"));
 
       return json(200, {
         user,
         setupRequired: users.length === 0,
         users: user?.role === "admin" ? publicUsers(users) : [],
+        invites: user?.role === "admin" ? publicInvites(invites) : [],
       });
     }
 
@@ -40,6 +48,10 @@ export default async function handler(request) {
 
     if (action === "login") {
       return login(store, body);
+    }
+
+    if (action === "accept-invite") {
+      return acceptInvite(store, body);
     }
 
     if (action === "logout") {
@@ -63,6 +75,10 @@ export default async function handler(request) {
 
     if (action === "create-user") {
       return createUser(store, body);
+    }
+
+    if (action === "create-invite") {
+      return createInvite(store, body, currentUser);
     }
 
     if (action === "delete-user") {
@@ -143,6 +159,86 @@ async function createUser(store, body) {
   return json(200, { user: publicUser(user), users: publicUsers(users) });
 }
 
+async function createInvite(store, body, currentUser) {
+  const users = await getUsers(store);
+  const invites = await getInvites(store);
+  const email = normalizeEmail(body.email);
+  const name = String(body.name || "").trim();
+
+  if (!name) throw new Error("Name is required");
+  if (!email.includes("@")) throw new Error("Valid email is required");
+  if (users.some((user) => user.email === email)) {
+    return json(409, { error: "A login account already exists for this email" });
+  }
+
+  const pendingInvite = invites.find((invite) => invite.email === email && !invite.acceptedAt);
+  if (pendingInvite) return json(200, { invite: publicInvite(pendingInvite), invites: publicInvites(invites) });
+
+  const invite = {
+    id: crypto.randomUUID(),
+    token: crypto.randomBytes(24).toString("hex"),
+    name,
+    email,
+    role: body.role === "admin" ? "admin" : "employee",
+    createdAt: new Date().toISOString(),
+    createdBy: currentUser.id,
+    acceptedAt: null,
+    acceptedUserId: null,
+  };
+
+  invites.unshift(invite);
+  await setInvites(store, invites);
+  return json(200, { invite: publicInvite(invite), invites: publicInvites(invites) });
+}
+
+async function getInvite(store, token) {
+  const invites = await getInvites(store);
+  const invite = invites.find((item) => item.token === token);
+  if (!invite) return json(404, { error: "Invite link not found" });
+
+  return json(200, {
+    invite: {
+      name: invite.name,
+      email: invite.email,
+      role: invite.role,
+      acceptedAt: invite.acceptedAt,
+    },
+  });
+}
+
+async function acceptInvite(store, body) {
+  const invites = await getInvites(store);
+  const invite = invites.find((item) => item.token === body.token);
+  if (!invite) return json(404, { error: "Invite link not found" });
+  if (invite.acceptedAt) return json(409, { error: "Invite has already been used" });
+
+  const users = await getUsers(store);
+  const email = normalizeEmail(body.email || invite.email);
+  if (email !== invite.email) return json(400, { error: "Use the email address from the invite" });
+  if (users.some((user) => user.email === email)) {
+    return json(409, { error: "A login account already exists for this email" });
+  }
+
+  const user = makeUser(
+    {
+      name: body.name || invite.name,
+      email,
+      password: body.password,
+    },
+    invite.role,
+  );
+  user.password = hashPassword(assertPassword(body.password));
+  users.push(user);
+  invite.acceptedAt = new Date().toISOString();
+  invite.acceptedUserId = user.id;
+
+  await setUsers(store, users);
+  await setInvites(store, invites);
+
+  const sessionToken = await createSession(store, user.id);
+  return json(200, { token: sessionToken, user: publicUser(user), users: [], invites: [] });
+}
+
 async function deleteUser(store, body, currentUser) {
   const users = await getUsers(store);
   const userId = body.userId;
@@ -213,6 +309,14 @@ async function setUsers(store, users) {
   await store.setJSON("users", users);
 }
 
+async function getInvites(store) {
+  return (await store.get("invites", { type: "json" })) || [];
+}
+
+async function setInvites(store, invites) {
+  await store.setJSON("invites", invites);
+}
+
 function makeUser(body, role) {
   const name = String(body.name || "").trim();
   const email = normalizeEmail(body.email);
@@ -256,6 +360,22 @@ function verifyPassword(password, storedPassword) {
 
 function publicUsers(users) {
   return users.map(publicUser);
+}
+
+function publicInvites(invites) {
+  return invites.map(publicInvite);
+}
+
+function publicInvite(invite) {
+  return {
+    id: invite.id,
+    token: invite.token,
+    name: invite.name,
+    email: invite.email,
+    role: invite.role,
+    createdAt: invite.createdAt,
+    acceptedAt: invite.acceptedAt,
+  };
 }
 
 function publicUser(user) {

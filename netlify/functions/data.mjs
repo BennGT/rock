@@ -33,7 +33,7 @@ export default async function handler(request) {
       }
 
       const currentData = (await store.get("shared-data", { type: "json" })) || {};
-      const nextData = user.role === "admin" ? data : mergeEmployeeData(currentData, data, user);
+      const nextData = user.role === "admin" ? mergeAdminData(currentData, data) : mergeEmployeeData(currentData, data, user);
 
       await store.setJSON("shared-data", {
         ...nextData,
@@ -52,6 +52,14 @@ export default async function handler(request) {
       name: error.name,
     });
   }
+}
+
+function mergeAdminData(currentData, incomingData) {
+  return {
+    ...incomingData,
+    messages: mergeById(currentData.messages, incomingData.messages),
+    requests: mergeById(currentData.requests, incomingData.requests),
+  };
 }
 
 function mergeEmployeeData(currentData, incomingData, user) {
@@ -93,6 +101,21 @@ function findEmployeeIdForUser(data, user) {
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
+}
+
+function mergeById(currentItems = [], incomingItems = []) {
+  const merged = new Map();
+  if (Array.isArray(currentItems)) {
+    currentItems.forEach((item) => {
+      if (item?.id) merged.set(item.id, item);
+    });
+  }
+  if (Array.isArray(incomingItems)) {
+    incomingItems.forEach((item) => {
+      if (item?.id) merged.set(item.id, item);
+    });
+  }
+  return Array.from(merged.values());
 }
 
 function getMarshalStore(name) {
