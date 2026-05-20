@@ -45,7 +45,7 @@ const views = {
   schedule: "Schedule",
   messages: "Messages",
   staff: "Staff",
-  setup: "Setup",
+  setup: "Account",
 };
 
 const areaColors = {
@@ -678,21 +678,16 @@ function renderSchedule() {
         }
       </div>
 
-      ${
-        isAdmin()
-          ? `<div class="filter-strip" aria-label="Schedule staff filter">
-              <button class="mini-button ${state.scheduleEmployeeFilterId === "all" ? "active" : ""}" data-schedule-filter="all" type="button">All staff</button>
-              ${state.data.employees
-                .map(
-                  (employee) =>
-                    `<button class="mini-button ${state.scheduleEmployeeFilterId === employee.id ? "active" : ""}" data-schedule-filter="${employee.id}" type="button">${employee.name}</button>`,
-                )
-                .join("")}
-            </div>`
-          : selectedEmployee
-            ? `<div class="copy-banner">Showing ${selectedEmployee.name}'s published shifts.</div>`
-            : ""
-      }
+      <div class="filter-strip" aria-label="Schedule staff filter">
+        <button class="mini-button ${state.scheduleEmployeeFilterId === "all" ? "active" : ""}" data-schedule-filter="all" type="button">All staff</button>
+        ${state.data.employees
+          .map(
+            (employee) =>
+              `<button class="mini-button ${state.scheduleEmployeeFilterId === employee.id ? "active" : ""}" data-schedule-filter="${employee.id}" type="button">${employee.name}</button>`,
+          )
+          .join("")}
+      </div>
+      ${!isAdmin() && selectedEmployee ? `<div class="copy-banner">Showing ${selectedEmployee.name}'s published shifts.</div>` : ""}
 
       ${
         state.copiedShift && isAdmin()
@@ -1154,15 +1149,11 @@ function renderStaffItem(employee) {
       <div class="staff-meta">
         <span>${nextShift ? `${formatDateShort(parseDateKey(nextShift.date))}, ${nextShift.start}` : "No upcoming shift"}</span>
       </div>
-      ${
-        isAdmin()
-          ? `<div class="staff-actions">
-              <button class="ghost-button" data-invite-employee-id="${employee.id}" type="button" ${employee.email ? "" : "disabled"}>Invite</button>
-              <button class="ghost-button" data-view-employee-schedule="${employee.id}" type="button">View shifts</button>
-              <button class="ghost-button" data-employee-id="${employee.id}" type="button">Edit</button>
-            </div>`
-          : ""
-      }
+      <div class="staff-actions">
+        ${isAdmin() ? `<button class="ghost-button" data-invite-employee-id="${employee.id}" type="button" ${employee.email ? "" : "disabled"}>Invite</button>` : ""}
+        <button class="ghost-button" data-view-employee-schedule="${employee.id}" type="button">View shifts</button>
+        ${isAdmin() ? `<button class="ghost-button" data-employee-id="${employee.id}" type="button">Edit</button>` : ""}
+      </div>
     </article>
   `;
 }
@@ -1623,6 +1614,7 @@ async function submitAuth(event) {
   try {
     const formData = new FormData(authForm);
     const action = state.inviteToken ? "accept-invite" : state.setupRequired ? "setup" : "login";
+    const acceptedInvite = Boolean(state.inviteToken);
     const payload = await authRequest(
       {
         action,
@@ -1639,7 +1631,10 @@ async function submitAuth(event) {
     state.authUsers = payload.users || [];
     state.authInvites = payload.invites || [];
     state.setupRequired = false;
-    if (state.inviteToken && typeof window !== "undefined") {
+    if (acceptedInvite) {
+      state.view = "setup";
+    }
+    if (acceptedInvite && typeof window !== "undefined") {
       state.inviteToken = null;
       state.inviteDetails = null;
       window.history.replaceState({}, "", window.location.pathname);
@@ -1863,7 +1858,7 @@ ${window.location.origin}
 Sign in with this email address:
 ${email}
 
-Your manager will give you your temporary password separately. After you sign in, go to Setup > Password to change it.
+Your manager will give you your temporary password separately. After you sign in, go to Account > Password to change it.
 
 Thanks`;
 }
@@ -2573,7 +2568,7 @@ function weekShifts() {
 
 function canSeeShift(shift) {
   if (isAdmin()) return true;
-  return shift.published && shift.employeeId === state.data.currentUserId;
+  return shift.published;
 }
 
 function inferAreas(data, fallbackAreas) {
