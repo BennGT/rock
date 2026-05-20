@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { getStore } from "@netlify/blobs";
 
 const headers = {
@@ -65,8 +66,7 @@ function mergeAdminData(currentData, incomingData) {
 }
 
 function mergeEmployeeData(currentData, incomingData, user) {
-  const employeeId = findEmployeeIdForUser(currentData, user);
-  if (!employeeId) return currentData;
+  let employeeId = findEmployeeIdForUser(currentData, user);
 
   const currentMessages = Array.isArray(currentData.messages) ? currentData.messages : [];
   const incomingMessages = Array.isArray(incomingData.messages) ? incomingData.messages : [];
@@ -90,21 +90,26 @@ function mergeEmployeeData(currentData, incomingData, user) {
     });
 
   const incomingEmployees = Array.isArray(incomingData.employees) ? incomingData.employees : [];
-  const incomingEmployee = incomingEmployees.find((employee) => employee.id === employeeId);
+  let incomingEmployee = incomingEmployees.find((employee) => employee.id === employeeId);
+  if (!employeeId) {
+    incomingEmployee = incomingEmployees.find((employee) => normalizeEmail(employee.email) === normalizeEmail(user.email));
+    employeeId = incomingEmployee?.id || null;
+  }
+
   const currentEmployees = Array.isArray(currentData.employees) ? currentData.employees : [];
+  if (incomingEmployee && !findEmployeeIdForUser(currentData, user)) {
+    const existingBlankProfile = currentEmployees.find(
+      (employee) =>
+        !normalizeEmail(employee.email) &&
+        cleanText(employee.name).toLowerCase() === cleanText(incomingEmployee.name || user.name).toLowerCase(),
+    );
+    if (existingBlankProfile) employeeId = existingBlankProfile.id;
+  }
   const employees = incomingEmployee
-    ? currentEmployees.map((employee) => {
-        if (employee.id !== employeeId) return employee;
-        return {
-          ...employee,
-          name: cleanText(incomingEmployee.name) || employee.name,
-          initials: cleanText(incomingEmployee.initials).slice(0, 3).toUpperCase() || employee.initials,
-          phone: cleanText(incomingEmployee.phone),
-          nextOfKinName: cleanText(incomingEmployee.nextOfKinName),
-          nextOfKinPhone: cleanText(incomingEmployee.nextOfKinPhone),
-        };
-      })
+    ? upsertOwnEmployee(currentEmployees, incomingEmployee, user, employeeId)
     : currentEmployees;
+
+  if (!employeeId) return currentData;
 
   return {
     ...currentData,
@@ -114,6 +119,37 @@ function mergeEmployeeData(currentData, incomingData, user) {
     requests: [...ownRequests, ...otherRequests],
     savedAt: incomingData.savedAt || currentData.savedAt,
   };
+}
+
+function upsertOwnEmployee(currentEmployees, incomingEmployee, user, employeeId) {
+  const ownId = employeeId || incomingEmployee.id || crypto.randomUUID();
+  const existingIndex = currentEmployees.findIndex((employee) => employee.id === ownId);
+  const existing = existingIndex >= 0 ? currentEmployees[existingIndex] : {};
+  const ownEmployee = {
+    ...existing,
+    id: existing.id || ownId,
+    name: cleanText(incomingEmployee.name) || cleanText(user.name),
+    initials: cleanText(incomingEmployee.initials).slice(0, 3).toUpperCase() || makeInitials(incomingEmployee.name || user.name),
+    role: existing.role || "Team member",
+    email: normalizeEmail(user.email),
+    phone: cleanText(incomingEmployee.phone),
+    nextOfKinName: cleanText(incomingEmployee.nextOfKinName),
+    nextOfKinPhone: cleanText(incomingEmployee.nextOfKinPhone),
+    color: existing.color || colorForText(user.email),
+    status: existing.status || "Available",
+  };
+
+  if (existingIndex >= 0) {
+    return currentEmployees.map((employee) => {
+      if (employee.id !== ownId) return employee;
+        return {
+          ...employee,
+          ...ownEmployee,
+        };
+    });
+  }
+
+  return [...currentEmployees, ownEmployee];
 }
 
 function findEmployeeIdForUser(data, user) {
@@ -152,6 +188,26 @@ function dataForUser(data, user) {
 
 function cleanText(value) {
   return String(value || "").trim();
+}
+
+function makeInitials(name) {
+  return String(name || "")
+    .trim()
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 3)
+    .toUpperCase();
+}
+
+function colorForText(text) {
+  const palette = ["#a33a24", "#087aa3", "#d84a2a", "#211a17", "#0f766e", "#9a6700", "#7c3aed", "#be123c"];
+  const value = String(text || "");
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) % palette.length;
+  }
+  return palette[hash] || palette[0];
 }
 
 function normalizeEmail(email) {

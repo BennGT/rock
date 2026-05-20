@@ -45,6 +45,7 @@ const views = {
   schedule: "Schedule",
   messages: "Messages",
   staff: "Staff",
+  mydetails: "My details",
   setup: "Account",
 };
 
@@ -268,6 +269,7 @@ function render() {
     schedule: renderSchedule,
     messages: renderMessages,
     staff: renderStaff,
+    mydetails: renderMyDetails,
     setup: renderSetup,
   }[state.view];
 
@@ -815,7 +817,6 @@ function renderSetup() {
   if (!isAdmin()) {
     return `
       <div class="setup-layout">
-        ${renderPersonalDetailsPanel()}
         ${renderPasswordPanel()}
         ${renderPhoneAlertsPanel()}
       </div>
@@ -824,7 +825,6 @@ function renderSetup() {
 
   return `
     <div class="setup-layout">
-      ${renderPersonalDetailsPanel()}
       ${renderPasswordPanel()}
       <section class="panel">
         <div class="panel-head">
@@ -915,23 +915,27 @@ function renderSetup() {
   `;
 }
 
+function renderMyDetails() {
+  return `
+    <div class="setup-layout">
+      ${renderPersonalDetailsPanel()}
+    </div>
+  `;
+}
+
 function renderPersonalDetailsPanel() {
   const employee = getCurrentUser();
-  if (!employee.id) {
-    return `
-      <section class="panel wide-panel">
-        <div class="panel-head">
-          <div>
-            <h2 class="panel-title">My details</h2>
-            <p class="panel-subtitle">Your staff profile appears after your account is linked</p>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div class="empty-state">Ask an admin to send you an invite or match your Staff email to your login email.</div>
-        </div>
-      </section>
-    `;
-  }
+  const profile = employee.id
+    ? employee
+    : {
+        id: null,
+        name: state.authUser?.name || "",
+        initials: makeInitials(state.authUser?.name || ""),
+        email: normalizeEmail(state.authUser?.email),
+        phone: "",
+        nextOfKinName: "",
+        nextOfKinPhone: "",
+      };
 
   return `
     <section class="panel wide-panel">
@@ -945,27 +949,27 @@ function renderPersonalDetailsPanel() {
         <form class="form-grid" id="personalDetailsForm">
           <label>
             Name
-            <input name="name" type="text" value="${escapeHtml(employee.name)}" required />
+            <input name="name" type="text" value="${escapeHtml(profile.name)}" required />
           </label>
           <label>
             Initials
-            <input name="initials" type="text" maxlength="3" value="${escapeHtml(employee.initials)}" required />
+            <input name="initials" type="text" maxlength="3" value="${escapeHtml(profile.initials)}" required />
           </label>
           <label>
             Email
-            <input name="email" type="email" value="${escapeHtml(employee.email)}" required />
+            <input name="email" type="email" value="${escapeHtml(profile.email)}" readonly required />
           </label>
           <label>
             Phone
-            <input name="phone" type="tel" value="${escapeHtml(employee.phone)}" />
+            <input name="phone" type="tel" value="${escapeHtml(profile.phone)}" />
           </label>
           <label>
             Next of kin
-            <input name="nextOfKinName" type="text" value="${escapeHtml(employee.nextOfKinName)}" />
+            <input name="nextOfKinName" type="text" value="${escapeHtml(profile.nextOfKinName)}" />
           </label>
           <label>
             Next of kin phone
-            <input name="nextOfKinPhone" type="tel" value="${escapeHtml(employee.nextOfKinPhone)}" />
+            <input name="nextOfKinPhone" type="tel" value="${escapeHtml(profile.nextOfKinPhone)}" />
           </label>
           <div class="modal-actions full-field">
             <button class="primary-button" type="submit">Save my details</button>
@@ -1175,20 +1179,39 @@ function renderAreaRow(area) {
 function savePersonalDetails(event) {
   event.preventDefault();
   const employee = getCurrentUser();
-  if (!employee.id) {
-    syncSaveStatus("Staff profile is not linked yet", true);
+  const accountEmail = normalizeEmail(state.authUser?.email);
+  if (!accountEmail) {
+    syncSaveStatus("Sign in again before saving details", true);
     return;
   }
 
   const formData = new FormData(event.currentTarget);
-  const existingIndex = state.data.employees.findIndex((item) => item.id === employee.id);
-  if (existingIndex < 0) return;
+  let existingIndex = state.data.employees.findIndex((item) => item.id === employee.id);
+  let employeeId = employee.id;
+
+  if (existingIndex < 0) {
+    employeeId = crypto.randomUUID();
+    state.data.employees.push({
+      id: employeeId,
+      name: "",
+      initials: "",
+      role: "Team member",
+      email: accountEmail,
+      phone: "",
+      nextOfKinName: "",
+      nextOfKinPhone: "",
+      color: colorForEmployee(employeeId),
+      status: "Available",
+    });
+    existingIndex = state.data.employees.length - 1;
+    state.data.currentUserId = employeeId;
+  }
 
   state.data.employees[existingIndex] = {
     ...state.data.employees[existingIndex],
     name: String(formData.get("name") || "").trim(),
     initials: String(formData.get("initials") || "").trim().toUpperCase(),
-    email: normalizeEmail(formData.get("email")),
+    email: accountEmail,
     phone: String(formData.get("phone") || "").trim(),
     nextOfKinName: String(formData.get("nextOfKinName") || "").trim(),
     nextOfKinPhone: String(formData.get("nextOfKinPhone") || "").trim(),
@@ -1632,7 +1655,7 @@ async function submitAuth(event) {
     state.authInvites = payload.invites || [];
     state.setupRequired = false;
     if (acceptedInvite) {
-      state.view = "setup";
+      state.view = "mydetails";
     }
     if (acceptedInvite && typeof window !== "undefined") {
       state.inviteToken = null;
@@ -2181,7 +2204,7 @@ function hydrateUserSelect() {
   syncCurrentEmployeeFromAuth();
 
   if (!state.data.employees.some((employee) => employee.id === state.data.currentUserId)) {
-    state.data.currentUserId = state.data.employees[0]?.id || null;
+    state.data.currentUserId = isAdmin() ? state.data.employees[0]?.id || null : null;
   }
 }
 
@@ -2474,7 +2497,7 @@ function normalizeData(data) {
   merged.activeChannel = teamChannel.id;
 
   if (!merged.employees.some((employee) => employee.id === merged.currentUserId)) {
-    merged.currentUserId = merged.employees[0]?.id || null;
+    merged.currentUserId = isAdmin() ? merged.employees[0]?.id || null : null;
   }
 
   return merged;

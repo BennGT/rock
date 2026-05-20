@@ -253,7 +253,7 @@ async function acceptInvite(store, dataStore, body) {
 async function upsertEmployeeFromInvite(store, invite, body) {
   const data = (await store.get("shared-data", { type: "json" })) || {};
   const employees = Array.isArray(data.employees) ? data.employees : [];
-  const email = normalizeEmail(invite.email);
+  const email = normalizeEmail(body.email || invite.email);
   const existingIndex = employees.findIndex((employee) => normalizeEmail(employee.email) === email);
   const existing = existingIndex >= 0 ? employees[existingIndex] : {};
   const name = String(body.name || invite.name || "").trim();
@@ -282,7 +282,7 @@ async function upsertEmployeeFromInvite(store, invite, body) {
     businessSubtitle: data.businessSubtitle || "Rock N Water Landscapes",
     appInstalled: Boolean(data.appInstalled),
     notificationsEnabled: Boolean(data.notificationsEnabled),
-    currentUserId: data.currentUserId || employee.id,
+    currentUserId: data.currentUserId || null,
     activeChannel: "team",
     areas: Array.isArray(data.areas) && data.areas.length ? data.areas : ["General", "Landscaping", "Maintenance", "Construction", "Admin"],
     employees,
