@@ -141,6 +141,10 @@ function bindChrome() {
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       state.deferredInstallPrompt = event;
+      if (state.data.appInstalled && !isStandaloneApp()) {
+        state.data.appInstalled = false;
+        saveData({ syncCloud: false });
+      }
       syncInstallButton();
     });
 
@@ -2081,8 +2085,9 @@ function authHeaders(extraHeaders = {}) {
 }
 
 function syncInstallButton() {
-  const installed = isStandaloneApp() || state.data.appInstalled;
-  installAppButton.textContent = installed ? "Installed" : "Install app";
+  const installed = isStandaloneApp() || (state.data.appInstalled && !state.deferredInstallPrompt);
+  installAppButton.classList.toggle("hidden", installed);
+  installAppButton.textContent = "Install app";
   installAppButton.disabled = installed;
 }
 
