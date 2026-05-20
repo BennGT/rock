@@ -48,6 +48,7 @@ const views = {
   mydetails: "My details",
   setup: "Account",
 };
+const defaultView = "dashboard";
 
 const areaColors = {
   General: "#276ef1",
@@ -90,6 +91,7 @@ const deleteEmployeeButton = document.querySelector("#deleteEmployeeButton");
 init();
 
 function init() {
+  state.view = readViewFromUrl();
   todayLabel.textContent = formatLongDate(new Date());
   syncShell();
   syncSaveStatus();
@@ -106,9 +108,8 @@ function bindChrome() {
   document.querySelector("#navTabs").addEventListener("click", (event) => {
     const tab = event.target.closest("[data-view]");
     if (!tab) return;
-    state.view = tab.dataset.view;
+    navigateToView(tab.dataset.view);
     closeMenu();
-    render();
   });
 
   menuButton.addEventListener("click", () => {
@@ -126,6 +127,11 @@ function bindChrome() {
   notificationButton.addEventListener("click", requestNotifications);
 
   if (typeof window !== "undefined") {
+    window.addEventListener("popstate", () => {
+      state.view = readViewFromUrl();
+      render();
+    });
+
     window.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       state.deferredInstallPrompt = event;
@@ -258,6 +264,7 @@ function bindChrome() {
 }
 
 function render() {
+  if (!views[state.view]) state.view = defaultView;
   document.querySelectorAll(".nav-tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === state.view);
   });
@@ -316,8 +323,7 @@ function bindViewEvents() {
   appView.querySelectorAll("[data-view-employee-schedule]").forEach((button) => {
     button.addEventListener("click", () => {
       state.scheduleEmployeeFilterId = button.dataset.viewEmployeeSchedule;
-      state.view = "schedule";
-      render();
+      navigateToView("schedule");
     });
   });
 
@@ -575,6 +581,37 @@ function saveInviteDraft(event) {
 
 function closeMenu() {
   document.body.classList.remove("menu-open");
+}
+
+function navigateToView(view, options = {}) {
+  const nextView = views[view] ? view : defaultView;
+  state.view = nextView;
+  writeViewToHistory(nextView, options);
+  render();
+}
+
+function readViewFromUrl() {
+  if (typeof window === "undefined") return defaultView;
+  const view = new URLSearchParams(window.location.search).get("page");
+  return views[view] ? view : defaultView;
+}
+
+function writeViewToHistory(view, options = {}) {
+  if (typeof window === "undefined" || !window.history?.pushState) return;
+  const url = new URL(window.location.href);
+  if (view === defaultView) {
+    url.searchParams.delete("page");
+  } else {
+    url.searchParams.set("page", view);
+  }
+  url.searchParams.delete("invite");
+
+  const nextUrl = `${url.pathname}${url.search}${url.hash}`;
+  const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  if (nextUrl === currentUrl) return;
+
+  const method = options.replace ? "replaceState" : "pushState";
+  window.history[method]({ view }, "", nextUrl);
 }
 
 function renderDashboard() {
@@ -1326,9 +1363,8 @@ function openShiftModal(shiftId = null) {
   }
 
   if (!state.data.employees.length) {
-    state.view = "staff";
     syncSaveStatus("Add an employee before creating shifts", true);
-    render();
+    navigateToView("staff");
     return;
   }
 
@@ -1669,12 +1705,12 @@ async function submitAuth(event) {
     state.authInvites = payload.invites || [];
     state.setupRequired = false;
     if (acceptedInvite) {
-      state.view = "mydetails";
+      navigateToView("mydetails", { replace: true });
     }
     if (acceptedInvite && typeof window !== "undefined") {
       state.inviteToken = null;
       state.inviteDetails = null;
-      window.history.replaceState({}, "", window.location.pathname);
+      writeViewToHistory(state.view, { replace: true });
     }
     localStorage.setItem(authTokenKey, state.authToken);
     authForm.reset();
