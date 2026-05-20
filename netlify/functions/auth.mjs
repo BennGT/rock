@@ -460,7 +460,7 @@ function publicUsers(users) {
 }
 
 function publicInvites(invites) {
-  return invites.map(publicInvite);
+  return invites.filter((invite) => !invite.acceptedAt).map(publicInvite);
 }
 
 function publicInvite(invite) {

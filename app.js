@@ -993,7 +993,7 @@ function renderSetup() {
                   <button class="primary-button" type="submit">Create invite</button>
                 </form>
                 <div class="section-gap config-list">
-                  ${state.authInvites.length ? state.authInvites.map(renderInviteRow).join("") : `<div class="empty-state">No invitations yet.</div>`}
+                  ${state.authInvites.length ? state.authInvites.filter((invite) => !invite.acceptedAt).map(renderInviteRow).join("") : `<div class="empty-state">No pending invitations.</div>`}
                 </div>
                 <div class="config-list">
                   ${state.authUsers.length ? state.authUsers.map(renderAccountRow).join("") : `<div class="empty-state">No login accounts loaded.</div>`}
