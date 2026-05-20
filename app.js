@@ -148,7 +148,7 @@ function bindChrome() {
 
   shiftForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!isAdmin()) {
+    if (!isScheduleAdmin()) {
       syncSaveStatus("Only admins can edit schedules", true);
       closeShiftModal();
       return;
@@ -184,7 +184,7 @@ function bindChrome() {
 
   deleteShiftButton.addEventListener("click", () => {
     if (!state.editingShiftId) return;
-    if (!isAdmin()) {
+    if (!isScheduleAdmin()) {
       syncSaveStatus("Only admins can delete shifts", true);
       return;
     }
@@ -203,7 +203,7 @@ function bindChrome() {
 
   employeeForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (!isAdmin()) {
+    if (!isOwnerAdmin()) {
       syncSaveStatus("Only admins can edit employees", true);
       closeEmployeeModal();
       return;
@@ -238,7 +238,7 @@ function bindChrome() {
 
   deleteEmployeeButton.addEventListener("click", () => {
     if (!state.editingEmployeeId) return;
-    if (!isAdmin()) {
+    if (!isOwnerAdmin()) {
       syncSaveStatus("Only admins can delete employees", true);
       return;
     }
@@ -248,7 +248,7 @@ function bindChrome() {
     state.data.shifts = state.data.shifts.filter((shift) => shift.employeeId !== state.editingEmployeeId);
     state.data.requests = state.data.requests.filter((request) => request.employeeId !== state.editingEmployeeId);
     state.data.messages = state.data.messages.filter((message) => message.employeeId !== state.editingEmployeeId);
-    state.data.currentUserId = state.data.employees[0]?.id || null;
+    state.data.currentUserId = null;
     saveData();
     notifyTeam("Employee removed", employee.name);
     hydrateUserSelect();
@@ -412,7 +412,7 @@ function bindViewEvents() {
 
   appView.querySelectorAll("[data-request-status]").forEach((select) => {
     select.addEventListener("change", () => {
-      if (!isAdmin()) {
+      if (!isScheduleAdmin()) {
         syncSaveStatus("Only admins can update requests", true);
         return;
       }
@@ -603,7 +603,7 @@ function renderDashboard() {
               <h2 class="panel-title">Today's roster</h2>
               <p class="panel-subtitle">${formatDateShort(new Date())}</p>
             </div>
-            <button class="ghost-button" data-action="new-shift" type="button">Add shift</button>
+            ${isScheduleAdmin() ? `<button class="ghost-button" data-action="new-shift" type="button">Add shift</button>` : ""}
           </div>
           <div class="panel-body shift-list">
             ${
@@ -671,7 +671,7 @@ function renderSchedule() {
           <button data-week="1" type="button">Next</button>
         </div>
         ${
-          isAdmin()
+          isScheduleAdmin()
             ? `<div class="toolbar">
                 <button class="ghost-button" data-action="publish-week" type="button" ${unpublishedCount ? "" : "disabled"}>Publish week</button>
                 <button class="primary-button" data-action="new-shift" type="button">New shift</button>
@@ -689,17 +689,17 @@ function renderSchedule() {
           )
           .join("")}
       </div>
-      ${!isAdmin() && selectedEmployee ? `<div class="copy-banner">Showing ${selectedEmployee.name}'s published shifts.</div>` : ""}
+      ${!isScheduleAdmin() && selectedEmployee ? `<div class="copy-banner">Showing ${selectedEmployee.name}'s published shifts.</div>` : ""}
 
       ${
-        state.copiedShift && isAdmin()
+        state.copiedShift && isScheduleAdmin()
           ? `<div class="copy-banner">
               Copied ${copiedEmployee.name}, ${state.copiedShift.start} to ${state.copiedShift.end}. Choose Paste on a day.
             </div>`
           : ""
       }
       ${
-        isAdmin() && unpublishedCount
+        isScheduleAdmin() && unpublishedCount
           ? `<div class="copy-banner">${unpublishedCount} shift${unpublishedCount === 1 ? "" : "s"} not yet published to employees.</div>`
           : ""
       }
@@ -716,7 +716,7 @@ function renderSchedule() {
                     <strong>${formatWeekday(day)}</strong>
                     <span>${formatDateShort(day)}</span>
                   </div>
-                  ${state.copiedShift && isAdmin() ? `<button class="mini-button" data-paste-shift-date="${key}" type="button">Paste</button>` : ""}
+                  ${state.copiedShift && isScheduleAdmin() ? `<button class="mini-button" data-paste-shift-date="${key}" type="button">Paste</button>` : ""}
                 </div>
                 <div class="day-shifts">
                   ${
@@ -758,7 +758,7 @@ function renderMessages() {
 }
 
 function renderStaff() {
-  const requests = isAdmin()
+  const requests = isScheduleAdmin()
     ? state.data.requests
     : state.data.requests.filter((request) => request.employeeId === state.data.currentUserId);
 
@@ -792,7 +792,7 @@ function renderStaff() {
             <button class="primary-button" type="submit">Submit request</button>
           </form>
           <div class="section-gap request-list">
-            ${requests.length ? requests.map((request) => renderRequestItem(request, isAdmin())).join("") : `<div class="empty-state">No staff requests yet.</div>`}
+            ${requests.length ? requests.map((request) => renderRequestItem(request, isScheduleAdmin())).join("") : `<div class="empty-state">No staff requests yet.</div>`}
           </div>
         </div>
       </section>
@@ -803,7 +803,7 @@ function renderStaff() {
             <h2 class="panel-title">Team directory</h2>
             <p class="panel-subtitle">${state.data.employees.length} employees</p>
           </div>
-          ${isAdmin() ? `<button class="ghost-button" data-action="new-employee" type="button">Add employee</button>` : ""}
+          ${isOwnerAdmin() ? `<button class="ghost-button" data-action="new-employee" type="button">Add employee</button>` : ""}
         </div>
         <div class="panel-body staff-list">
           ${state.data.employees.length ? state.data.employees.map(renderStaffItem).join("") : `<div class="empty-state">No employees yet. Add your first employee to start building the roster.</div>`}
@@ -814,7 +814,7 @@ function renderStaff() {
 }
 
 function renderSetup() {
-  if (!isAdmin()) {
+  if (!isOwnerAdmin()) {
     return `
       <div class="setup-layout">
         ${renderPasswordPanel()}
@@ -882,7 +882,7 @@ function renderSetup() {
       ${renderPhoneAlertsPanel()}
 
       ${
-        state.authUser?.role === "admin"
+        isOwnerAdmin()
           ? `<section class="panel wide-panel">
               <div class="panel-head">
                 <div>
@@ -897,6 +897,7 @@ function renderSetup() {
                   <input name="invitePhone" type="tel" placeholder="Phone" aria-label="Phone" autocomplete="off" inputmode="tel" value="${escapeHtml(state.inviteDraft.phone)}" />
                   <select name="inviteRole" aria-label="Role" autocomplete="off">
                     <option value="employee" ${state.inviteDraft.role === "employee" ? "selected" : ""}>Employee</option>
+                    <option value="manager" ${state.inviteDraft.role === "manager" ? "selected" : ""}>Manager</option>
                     <option value="admin" ${state.inviteDraft.role === "admin" ? "selected" : ""}>Admin</option>
                   </select>
                   <button class="primary-button" type="submit">Create invite</button>
@@ -924,8 +925,8 @@ function renderMyDetails() {
 }
 
 function renderPersonalDetailsPanel() {
-  const employee = getCurrentUser();
-  const showBlankProfile = !isAdmin() && (!employee.id || employee.profileComplete !== true);
+  const employee = getOwnEmployeeProfile();
+  const showBlankProfile = !employee.id || employee.profileComplete !== true;
   const profile = !showBlankProfile
     ? employee
     : {
@@ -1058,7 +1059,7 @@ function renderScheduleShift(shift) {
       </div>
       <span>${shift.area}</span>
       ${
-        isAdmin()
+        isScheduleAdmin()
           ? `<div class="shift-card-actions">
               <button class="ghost-button" data-shift-id="${shift.id}" type="button">Edit</button>
               <button class="ghost-button" data-copy-shift-id="${shift.id}" type="button">Copy</button>
@@ -1084,7 +1085,7 @@ function renderCompactMessage(message) {
 
 function renderMessage(message) {
   const employee = findEmployee(message.employeeId);
-  const canDelete = isAdmin() || message.employeeId === state.data.currentUserId;
+  const canDelete = isScheduleAdmin() || message.employeeId === state.data.currentUserId;
   return `
     <article class="message-item ${message.employeeId === state.data.currentUserId ? "own" : ""}">
       <div class="message-head">
@@ -1130,7 +1131,8 @@ function renderStaffItem(employee) {
     .filter((shift) => shift.employeeId === employee.id && shift.date >= toDateKey(new Date()) && canSeeShift(shift))
     .sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`))[0];
   const employeeColor = employee.color || colorForEmployee(employee.id);
-  const canSeePrivateDetails = isAdmin() || employee.id === state.data.currentUserId;
+  const ownEmployee = getOwnEmployeeProfile();
+  const canSeePrivateDetails = isOwnerAdmin() || employee.id === ownEmployee.id;
 
   return `
     <article class="staff-item" style="border-left-color: ${employeeColor}">
@@ -1155,9 +1157,9 @@ function renderStaffItem(employee) {
         <span>${nextShift ? `${formatDateShort(parseDateKey(nextShift.date))}, ${nextShift.start}` : "No upcoming shift"}</span>
       </div>
       <div class="staff-actions">
-        ${isAdmin() ? `<button class="ghost-button" data-invite-employee-id="${employee.id}" type="button" ${employee.email ? "" : "disabled"}>Invite</button>` : ""}
+        ${isOwnerAdmin() ? `<button class="ghost-button" data-invite-employee-id="${employee.id}" type="button" ${employee.email ? "" : "disabled"}>Invite</button>` : ""}
         <button class="ghost-button" data-view-employee-schedule="${employee.id}" type="button">View shifts</button>
-        ${isAdmin() ? `<button class="ghost-button" data-employee-id="${employee.id}" type="button">Edit</button>` : ""}
+        ${isOwnerAdmin() ? `<button class="ghost-button" data-employee-id="${employee.id}" type="button">Edit</button>` : ""}
       </div>
     </article>
   `;
@@ -1179,7 +1181,7 @@ function renderAreaRow(area) {
 
 function savePersonalDetails(event) {
   event.preventDefault();
-  const employee = getCurrentUser();
+  const employee = getOwnEmployeeProfile();
   const accountEmail = normalizeEmail(state.authUser?.email);
   if (!accountEmail) {
     syncSaveStatus("Sign in again before saving details", true);
@@ -1261,11 +1263,12 @@ function renderChannelRow(channel) {
 }
 
 function renderAccountRow(user) {
+  const roleLabel = user.role === "admin" ? "Owner admin" : user.role === "manager" ? "Manager" : "Employee";
   return `
     <div class="config-row account-row">
       <div>
         <strong>${escapeHtml(user.name)}</strong>
-        <span>${escapeHtml(user.email)} - ${user.role}</span>
+        <span>${escapeHtml(user.email)} - ${roleLabel}</span>
       </div>
       <form class="row-actions reset-password-form" data-reset-password-form="${user.id}">
         <input name="newPassword" type="password" placeholder="New password" aria-label="New password for ${escapeHtml(user.name)}" minlength="8" required />
@@ -1283,11 +1286,12 @@ function renderInviteRow(invite) {
   const inviteLink = buildInviteLink(invite.token);
   const inviteStatus = invite.acceptedAt ? `Accepted ${formatMessageDate(invite.acceptedAt)}` : "Pending";
   const inviteContact = `${escapeHtml(invite.email)}${invite.phone ? ` - ${escapeHtml(invite.phone)}` : ""}`;
+  const roleLabel = invite.role === "admin" ? "Owner admin" : invite.role === "manager" ? "Manager" : "Employee";
   return `
     <div class="config-row account-row">
       <div>
         <strong>${escapeHtml(invite.name)}</strong>
-        <span>${inviteContact} - ${invite.role} - ${inviteStatus}</span>
+        <span>${inviteContact} - ${roleLabel} - ${inviteStatus}</span>
       </div>
       <input type="text" value="${escapeHtml(inviteLink)}" aria-label="Invite link for ${escapeHtml(invite.name)}" readonly />
       <div class="row-actions">
@@ -1316,7 +1320,7 @@ function statusPill(status) {
 }
 
 function openShiftModal(shiftId = null) {
-  if (!isAdmin()) {
+  if (!isScheduleAdmin()) {
     syncSaveStatus("Only admins can edit schedules", true);
     return;
   }
@@ -1350,6 +1354,10 @@ function openShiftModal(shiftId = null) {
     .map((area) => `<option value="${escapeHtml(area)}">${escapeHtml(area)}</option>`)
     .join("");
 
+  if (!shiftId && !shift.employeeId) {
+    shift.employeeId = state.data.employees[0]?.id || "";
+  }
+
   Object.entries(shift).forEach(([key, value]) => {
     if (!shiftForm.elements[key]) return;
     if (shiftForm.elements[key].type === "checkbox") {
@@ -1371,7 +1379,7 @@ function closeShiftModal() {
 }
 
 function copyShift(shiftId) {
-  if (!isAdmin()) {
+  if (!isScheduleAdmin()) {
     syncSaveStatus("Only admins can copy shifts", true);
     return;
   }
@@ -1395,7 +1403,7 @@ function copyShift(shiftId) {
 }
 
 function pasteShift(date) {
-  if (!isAdmin()) {
+  if (!isScheduleAdmin()) {
     syncSaveStatus("Only admins can paste shifts", true);
     return;
   }
@@ -1416,7 +1424,7 @@ function pasteShift(date) {
 }
 
 function publishCurrentWeek() {
-  if (!isAdmin()) {
+  if (!isScheduleAdmin()) {
     syncSaveStatus("Only admins can publish schedules", true);
     return;
   }
@@ -1436,7 +1444,7 @@ function publishCurrentWeek() {
 }
 
 function openEmployeeModal(employeeId = null) {
-  if (!isAdmin()) {
+  if (!isOwnerAdmin()) {
     syncSaveStatus("Only admins can edit employees", true);
     return;
   }
@@ -1468,6 +1476,10 @@ function openEmployeeModal(employeeId = null) {
 }
 
 async function inviteEmployee(employeeId) {
+  if (!isOwnerAdmin()) {
+    syncSaveStatus("Only owner admins can invite staff from here", true);
+    return;
+  }
   const employee = findEmployee(employeeId);
   if (!employee.email) {
     syncSaveStatus("Add an email before inviting this employee", true);
@@ -2193,11 +2205,19 @@ function isStandaloneApp() {
 }
 
 function isAdmin() {
+  return isScheduleAdmin();
+}
+
+function isScheduleAdmin() {
+  return state.authUser?.role === "admin" || state.authUser?.role === "manager";
+}
+
+function isOwnerAdmin() {
   return state.authUser?.role === "admin";
 }
 
 function syncCurrentEmployeeFromAuth() {
-  if (isAdmin() || !state.authUser?.email) return;
+  if (!state.authUser?.email) return;
   const employee = state.data.employees.find((item) => normalizeEmail(item.email) === normalizeEmail(state.authUser.email));
   state.data.currentUserId = employee?.id || null;
 }
@@ -2206,7 +2226,7 @@ function hydrateUserSelect() {
   syncCurrentEmployeeFromAuth();
 
   if (!state.data.employees.some((employee) => employee.id === state.data.currentUserId)) {
-    state.data.currentUserId = isAdmin() ? state.data.employees[0]?.id || null : null;
+    state.data.currentUserId = null;
   }
 }
 
@@ -2390,7 +2410,7 @@ async function handleAuthExpired() {
 }
 
 async function refreshAuthLists() {
-  if (!isAdmin()) return;
+  if (!isOwnerAdmin()) return;
 
   try {
     const payload = await authRequest(null, "GET");
@@ -2500,7 +2520,7 @@ function normalizeData(data) {
   merged.activeChannel = teamChannel.id;
 
   if (!merged.employees.some((employee) => employee.id === merged.currentUserId)) {
-    merged.currentUserId = isAdmin() ? merged.employees[0]?.id || null : null;
+    merged.currentUserId = null;
   }
 
   return merged;
@@ -2528,6 +2548,12 @@ function createSeedData() {
 
 function getCurrentUser() {
   return findEmployee(state.data.currentUserId);
+}
+
+function getOwnEmployeeProfile() {
+  const email = normalizeEmail(state.authUser?.email);
+  if (!email) return findEmployee(null);
+  return findEmployee(state.data.employees.find((employee) => normalizeEmail(employee.email) === email)?.id);
 }
 
 function getActiveChannel() {

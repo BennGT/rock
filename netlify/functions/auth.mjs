@@ -30,8 +30,8 @@ export default async function handler(request) {
       return json(200, {
         user,
         setupRequired: users.length === 0,
-        users: user?.role === "admin" ? publicUsers(users) : [],
-        invites: user?.role === "admin" ? publicInvites(invites) : [],
+        users: isOwnerAdmin(user) ? publicUsers(users) : [],
+        invites: isOwnerAdmin(user) ? publicInvites(invites) : [],
       });
     }
 
@@ -70,7 +70,7 @@ export default async function handler(request) {
       return changePassword(store, body, currentUser);
     }
 
-    if (currentUser.role !== "admin") {
+    if (!isOwnerAdmin(currentUser)) {
       return json(403, { error: "Admin access required" });
     }
 
@@ -145,7 +145,7 @@ async function login(store, body) {
   }
 
   const token = await createSession(store, user.id);
-  return json(200, { token, user: publicUser(user), users: user.role === "admin" ? publicUsers(users) : [] });
+  return json(200, { token, user: publicUser(user), users: isOwnerAdmin(user) ? publicUsers(users) : [] });
 }
 
 async function createUser(store, body) {
@@ -156,7 +156,7 @@ async function createUser(store, body) {
     return json(409, { error: "Email is already in use" });
   }
 
-  const user = makeUser(body, body.role === "admin" ? "admin" : "employee");
+  const user = makeUser(body, normalizeRole(body.role));
   user.password = hashPassword(assertPassword(body.password));
   users.push(user);
   await setUsers(store, users);
@@ -187,7 +187,7 @@ async function createInvite(store, body, currentUser) {
     name,
     email,
     phone,
-    role: body.role === "admin" ? "admin" : "employee",
+    role: normalizeRole(body.role),
     createdAt: new Date().toISOString(),
     createdBy: currentUser.id,
     acceptedAt: null,
@@ -420,6 +420,14 @@ function makeUser(body, role) {
     role,
     createdAt: new Date().toISOString(),
   };
+}
+
+function normalizeRole(role) {
+  return ["admin", "manager"].includes(role) ? role : "employee";
+}
+
+function isOwnerAdmin(user) {
+  return user?.role === "admin";
 }
 
 function normalizeEmail(email) {

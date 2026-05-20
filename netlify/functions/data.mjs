@@ -34,7 +34,11 @@ export default async function handler(request) {
       }
 
       const currentData = (await store.get("shared-data", { type: "json" })) || {};
-      const nextData = user.role === "admin" ? mergeAdminData(currentData, data) : mergeEmployeeData(currentData, data, user);
+      const nextData = isOwnerAdmin(user)
+        ? mergeAdminData(currentData, data)
+        : isManager(user)
+          ? mergeManagerData(currentData, data, user)
+          : mergeEmployeeData(currentData, data, user);
 
       await store.setJSON("shared-data", {
         ...nextData,
@@ -62,6 +66,21 @@ function mergeAdminData(currentData, incomingData) {
     deletedMessageIds,
     messages: mergeById(currentData.messages, incomingData.messages).filter((message) => !deletedMessageIds.includes(message.id)),
     requests: mergeById(currentData.requests, incomingData.requests),
+  };
+}
+
+function mergeManagerData(currentData, incomingData, user) {
+  const ownData = mergeEmployeeData(currentData, incomingData, user);
+  const deletedMessageIds = mergeDeletedIds(currentData.deletedMessageIds, incomingData.deletedMessageIds);
+
+  return {
+    ...currentData,
+    deletedMessageIds,
+    employees: ownData.employees || currentData.employees,
+    shifts: mergeById(currentData.shifts, incomingData.shifts),
+    messages: mergeById(currentData.messages, incomingData.messages).filter((message) => !deletedMessageIds.includes(message.id)),
+    requests: mergeById(currentData.requests, incomingData.requests),
+    savedAt: incomingData.savedAt || currentData.savedAt,
   };
 }
 
@@ -159,10 +178,11 @@ function findEmployeeIdForUser(data, user) {
 }
 
 function dataForUser(data, user) {
-  if (user.role === "admin") return data;
+  if (isOwnerAdmin(user)) return data;
 
   const employeeId = findEmployeeIdForUser(data, user);
   const employees = Array.isArray(data.employees) ? data.employees : [];
+  const manager = isManager(user);
 
   return {
     ...data,
@@ -182,9 +202,17 @@ function dataForUser(data, user) {
         nextOfKinPhone: "",
       };
     }),
-    shifts: Array.isArray(data.shifts) ? data.shifts.filter((shift) => shift.published) : [],
-    requests: Array.isArray(data.requests) ? data.requests.filter((request) => request.employeeId === employeeId) : [],
+    shifts: Array.isArray(data.shifts) ? data.shifts.filter((shift) => manager || shift.published) : [],
+    requests: Array.isArray(data.requests) ? data.requests.filter((request) => manager || request.employeeId === employeeId) : [],
   };
+}
+
+function isOwnerAdmin(user) {
+  return user?.role === "admin";
+}
+
+function isManager(user) {
+  return user?.role === "manager";
 }
 
 function cleanText(value) {
