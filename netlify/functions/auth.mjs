@@ -256,19 +256,19 @@ async function upsertEmployeeFromInvite(store, invite, body) {
   const email = normalizeEmail(body.email || invite.email);
   const existingIndex = employees.findIndex((employee) => normalizeEmail(employee.email) === email);
   const existing = existingIndex >= 0 ? employees[existingIndex] : {};
-  const name = String(body.name || invite.name || "").trim();
   const employee = {
     ...existing,
     id: existing.id || crypto.randomUUID(),
-    name,
-    initials: normalizeInitials(body.initials, name),
+    name: existing.name || "",
+    initials: existing.initials || "",
     role: existing.role || "Team member",
     email,
-    phone: String(body.phone || invite.phone || existing.phone || "").trim(),
-    nextOfKinName: String(body.nextOfKinName || existing.nextOfKinName || "").trim(),
-    nextOfKinPhone: String(body.nextOfKinPhone || existing.nextOfKinPhone || "").trim(),
+    phone: existing.phone || "",
+    nextOfKinName: existing.nextOfKinName || "",
+    nextOfKinPhone: existing.nextOfKinPhone || "",
     color: existing.color || colorForText(email),
     status: existing.status || "Available",
+    profileComplete: Boolean(existing.profileComplete),
   };
 
   if (existingIndex >= 0) {

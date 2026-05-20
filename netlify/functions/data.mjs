@@ -128,8 +128,8 @@ function upsertOwnEmployee(currentEmployees, incomingEmployee, user, employeeId)
   const ownEmployee = {
     ...existing,
     id: existing.id || ownId,
-    name: cleanText(incomingEmployee.name) || cleanText(user.name),
-    initials: cleanText(incomingEmployee.initials).slice(0, 3).toUpperCase() || makeInitials(incomingEmployee.name || user.name),
+    name: cleanText(incomingEmployee.name),
+    initials: cleanText(incomingEmployee.initials).slice(0, 3).toUpperCase() || makeInitials(incomingEmployee.name),
     role: existing.role || "Team member",
     email: normalizeEmail(user.email),
     phone: cleanText(incomingEmployee.phone),
@@ -137,6 +137,7 @@ function upsertOwnEmployee(currentEmployees, incomingEmployee, user, employeeId)
     nextOfKinPhone: cleanText(incomingEmployee.nextOfKinPhone),
     color: existing.color || colorForText(user.email),
     status: existing.status || "Available",
+    profileComplete: Boolean(cleanText(incomingEmployee.name) && cleanText(incomingEmployee.initials)),
   };
 
   if (existingIndex >= 0) {

@@ -925,12 +925,13 @@ function renderMyDetails() {
 
 function renderPersonalDetailsPanel() {
   const employee = getCurrentUser();
-  const profile = employee.id
+  const showBlankProfile = !isAdmin() && (!employee.id || employee.profileComplete !== true);
+  const profile = !showBlankProfile
     ? employee
     : {
         id: null,
-        name: state.authUser?.name || "",
-        initials: makeInitials(state.authUser?.name || ""),
+        name: "",
+        initials: "",
         email: normalizeEmail(state.authUser?.email),
         phone: "",
         nextOfKinName: "",
@@ -1215,6 +1216,7 @@ function savePersonalDetails(event) {
     phone: String(formData.get("phone") || "").trim(),
     nextOfKinName: String(formData.get("nextOfKinName") || "").trim(),
     nextOfKinPhone: String(formData.get("nextOfKinPhone") || "").trim(),
+    profileComplete: true,
   };
 
   saveData();
@@ -2487,6 +2489,7 @@ function normalizeData(data) {
     nextOfKinName: employee.nextOfKinName || "",
     nextOfKinPhone: employee.nextOfKinPhone || "",
     color: normalizeColor(employee.color) || colorForEmployee(employee.id),
+    profileComplete: Boolean(employee.profileComplete),
   }));
 
   merged.shifts = merged.shifts.map((shift) => ({
