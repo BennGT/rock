@@ -41,7 +41,7 @@ const state = {
 };
 
 const views = {
-  dashboard: "Today",
+  dashboard: "Home",
   schedule: "Schedule",
   messages: "Messages",
   staff: "Staff",
@@ -114,6 +114,12 @@ function bindChrome() {
 
   menuButton.addEventListener("click", () => {
     document.body.classList.toggle("menu-open");
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!document.body.classList.contains("menu-open")) return;
+    if (appMenu.contains(event.target) || menuButton.contains(event.target)) return;
+    closeMenu();
   });
 
   appMenu.addEventListener("click", (event) => {
@@ -285,7 +291,7 @@ function render() {
     setup: renderSetup,
   }[state.view];
 
-  appView.innerHTML = renderer();
+  appView.innerHTML = `${renderPageBrand()}${renderer()}`;
   bindViewEvents();
 }
 
@@ -635,6 +641,15 @@ function writeViewToHistory(view, options = {}) {
 
   const method = options.replace ? "replaceState" : "pushState";
   window.history[method]({ view }, "", nextUrl);
+}
+
+function renderPageBrand() {
+  if (state.view === "dashboard") return "";
+  return `
+    <section class="page-brand-card" aria-label="Sherif app page">
+      <img src="assets/rnw-logo.png" alt="Rock N Water Landscapes" />
+    </section>
+  `;
 }
 
 function renderDashboard() {

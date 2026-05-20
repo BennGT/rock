@@ -194,6 +194,7 @@ button {
   background: transparent;
   color: #d7e0e4;
   text-align: left;
+  font-weight: 800;
 }
 
 .nav-badge,
@@ -220,23 +221,6 @@ button {
 .nav-tab.active {
   background: #21313a;
   color: #ffffff;
-}
-
-.nav-icon {
-  width: 28px;
-  height: 24px;
-  display: grid;
-  place-items: center;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #9fb2bb;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.nav-tab.active .nav-icon {
-  background: #ffffff;
-  color: #211a17;
 }
 
 .user-switcher {
@@ -283,13 +267,25 @@ button {
 }
 
 .menu-button {
+  width: 44px;
   min-height: 40px;
+  display: inline-grid;
+  place-content: center;
+  gap: 5px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  padding: 0 12px;
+  padding: 0;
   background: var(--surface);
   color: var(--ink);
   font-weight: 900;
+}
+
+.menu-button span {
+  width: 20px;
+  height: 2px;
+  display: block;
+  border-radius: 999px;
+  background: currentColor;
 }
 
 .eyebrow {
@@ -442,6 +438,22 @@ h3 {
 .today-brand-card img {
   display: block;
   width: min(360px, 82%);
+  height: auto;
+  margin: 0 auto;
+}
+
+.page-brand-card {
+  display: none;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: var(--shadow);
+}
+
+.page-brand-card img {
+  display: block;
+  width: min(230px, 68%);
   height: auto;
   margin: 0 auto;
 }
@@ -1239,6 +1251,13 @@ textarea {
     display: grid;
     place-items: center;
     padding: 20px 14px;
+  }
+
+  .page-brand-card {
+    min-height: 96px;
+    display: grid;
+    place-items: center;
+    padding: 14px;
   }
 
   .sidebar {

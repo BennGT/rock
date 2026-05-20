@@ -56,27 +56,21 @@
 
         <nav class="nav-tabs" id="navTabs" aria-label="Workspace views">
           <button class="nav-tab active" data-view="dashboard" type="button">
-            <span class="nav-icon" aria-hidden="true">01</span>
-            Today
+            Home
           </button>
           <button class="nav-tab" data-view="schedule" type="button">
-            <span class="nav-icon" aria-hidden="true">02</span>
             Schedule
           </button>
           <button class="nav-tab" data-view="messages" type="button">
-            <span class="nav-icon" aria-hidden="true">03</span>
             Messages
           </button>
           <button class="nav-tab" data-view="staff" type="button">
-            <span class="nav-icon" aria-hidden="true">04</span>
             Staff
           </button>
           <button class="nav-tab" data-view="mydetails" type="button">
-            <span class="nav-icon" aria-hidden="true">05</span>
             My details
           </button>
           <button class="nav-tab" data-view="setup" type="button">
-            <span class="nav-icon" aria-hidden="true">06</span>
             Account
           </button>
         </nav>
@@ -86,10 +80,14 @@
       <main class="main-panel">
         <header class="topbar">
           <div class="topbar-title">
-            <button class="menu-button" id="menuButton" type="button" aria-label="Open menu">Menu</button>
+            <button class="menu-button" id="menuButton" type="button" aria-label="Open menu">
+              <span aria-hidden="true"></span>
+              <span aria-hidden="true"></span>
+              <span aria-hidden="true"></span>
+            </button>
             <div>
               <p class="eyebrow" id="todayLabel"></p>
-              <h1 id="viewTitle">Today</h1>
+              <h1 id="viewTitle">Home</h1>
             </div>
           </div>
           <div class="topbar-actions">
