@@ -267,6 +267,11 @@ function render() {
   if (!views[state.view]) state.view = defaultView;
   document.querySelectorAll(".nav-tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === state.view);
+    tab.querySelector(".nav-badge")?.remove();
+    const badgeCount = tab.dataset.view === "staff" ? pendingRequestCount() : 0;
+    if (badgeCount) {
+      tab.insertAdjacentHTML("beforeend", `<span class="nav-badge">${badgeCount}</span>`);
+    }
   });
 
   viewTitle.textContent = views[state.view];
@@ -285,6 +290,18 @@ function render() {
 }
 
 function bindViewEvents() {
+  appView.querySelectorAll("[data-dashboard-link]").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select, textarea")) return;
+      openDashboardLink(element.dataset.dashboardLink);
+    });
+    element.addEventListener("keydown", (event) => {
+      if (!["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      openDashboardLink(element.dataset.dashboardLink);
+    });
+  });
+
   appView.querySelectorAll("[data-action='new-shift']").forEach((button) => {
     button.addEventListener("click", () => openShiftModal());
   });
@@ -294,7 +311,13 @@ function bindViewEvents() {
   });
 
   appView.querySelectorAll("[data-shift-id]").forEach((button) => {
-    button.addEventListener("click", () => openShiftModal(button.dataset.shiftId));
+    button.addEventListener("click", () => {
+      if (state.view === "dashboard") {
+        openDashboardLink("today-schedule");
+        return;
+      }
+      openShiftModal(button.dataset.shiftId);
+    });
   });
 
   appView.querySelectorAll("[data-copy-shift-id]").forEach((button) => {
@@ -620,7 +643,7 @@ function renderDashboard() {
   const todayShifts = shiftsForDate(todayKey);
   const currentShift = currentUser.id ? todayShifts.find((shift) => shift.employeeId === currentUser.id) : null;
   const openShifts = state.data.shifts.filter((shift) => shift.status === "Open").length;
-  const pendingRequests = state.data.requests.filter((request) => request.status === "Pending").length;
+  const pendingRequests = pendingRequestCount();
   const weekEnd = toDateKey(addDays(state.weekStart, 7));
   const weekShifts = state.data.shifts.filter((shift) => shift.date >= toDateKey(state.weekStart) && shift.date < weekEnd).length;
 
@@ -632,13 +655,13 @@ function renderDashboard() {
         </section>
 
         <div class="metric-grid">
-          ${metric("On today", todayShifts.length, "Scheduled shifts")}
-          ${metric("Open shifts", openShifts, "Need coverage")}
-          ${metric("Pending", pendingRequests, "Staff requests")}
-          ${metric("This week", weekShifts, "Published shifts")}
+          ${metric("On today", todayShifts.length, "Scheduled shifts", "today-schedule")}
+          ${metric("Open shifts", openShifts, "Need coverage", "schedule")}
+          ${metric("Pending", pendingRequests, "Staff requests", "requests", pendingRequests)}
+          ${metric("This week", weekShifts, "Published shifts", "schedule")}
         </div>
 
-        <section class="panel">
+        <section class="panel clickable-card" data-dashboard-link="today-schedule" role="button" tabindex="0" aria-label="Open today's schedule">
           <div class="panel-head">
             <div>
               <h2 class="panel-title">Today's roster</h2>
@@ -657,7 +680,7 @@ function renderDashboard() {
       </div>
 
       <div class="shift-list">
-        <section class="highlight-card">
+        <section class="highlight-card clickable-card" data-dashboard-link="my-schedule" role="button" tabindex="0" aria-label="Open my schedule">
           <div class="highlight-row">
             <div>
               <span class="highlight-label">My shift today</span>
@@ -668,7 +691,7 @@ function renderDashboard() {
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel clickable-card" data-dashboard-link="messages" role="button" tabindex="0" aria-label="Open messages">
           <div class="panel-head">
             <div>
               <h2 class="panel-title">Latest messages</h2>
@@ -676,24 +699,50 @@ function renderDashboard() {
             </div>
           </div>
           <div class="panel-body message-list">
-            ${state.data.messages.slice(-4).reverse().map(renderCompactMessage).join("")}
+            ${state.data.messages.length ? state.data.messages.slice(-4).reverse().map(renderCompactMessage).join("") : `<div class="empty-state">No messages yet.</div>`}
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel clickable-card" data-dashboard-link="requests" role="button" tabindex="0" aria-label="Open requests">
           <div class="panel-head">
             <div>
-              <h2 class="panel-title">Requests</h2>
+              <h2 class="panel-title title-with-badge">Requests ${pendingRequests ? `<span class="notification-badge">${pendingRequests}</span>` : ""}</h2>
               <p class="panel-subtitle">Leave, availability, and swaps</p>
             </div>
           </div>
           <div class="panel-body request-list">
-            ${state.data.requests.slice(0, 4).map(renderRequestItem).join("")}
+            ${state.data.requests.length ? state.data.requests.slice(0, 4).map(renderRequestItem).join("") : `<div class="empty-state">No staff requests yet.</div>`}
           </div>
         </section>
       </div>
     </div>
   `;
+}
+
+function openDashboardLink(link) {
+  if (link === "messages") {
+    navigateToView("messages");
+    return;
+  }
+
+  if (link === "requests") {
+    navigateToView("staff");
+    return;
+  }
+
+  if (link === "my-schedule") {
+    const currentUser = getCurrentUser();
+    state.weekStart = startOfWeek(new Date());
+    state.scheduleEmployeeFilterId = currentUser.id || "all";
+    navigateToView("schedule");
+    return;
+  }
+
+  if (link === "today-schedule" || link === "schedule") {
+    state.weekStart = startOfWeek(new Date());
+    state.scheduleEmployeeFilterId = "all";
+    navigateToView("schedule");
+  }
 }
 
 function renderSchedule() {
@@ -1345,14 +1394,21 @@ function renderInviteRow(invite) {
   `;
 }
 
-function metric(label, value, caption) {
+function metric(label, value, caption, link = "", badge = 0) {
   return `
-    <article class="metric">
+    <article class="metric ${link ? "clickable-card" : ""}" ${link ? `data-dashboard-link="${link}" role="button" tabindex="0"` : ""}>
       <span>${label}</span>
-      <strong>${value}</strong>
+      <strong>${value}${badge ? `<span class="notification-badge metric-badge">${badge}</span>` : ""}</strong>
       <small>${caption}</small>
     </article>
   `;
+}
+
+function pendingRequestCount() {
+  const requests = isScheduleAdmin()
+    ? state.data.requests
+    : state.data.requests.filter((request) => request.employeeId === state.data.currentUserId);
+  return requests.filter((request) => request.status === "Pending").length;
 }
 
 function statusPill(status) {

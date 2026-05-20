@@ -196,6 +196,26 @@ button {
   text-align: left;
 }
 
+.nav-badge,
+.notification-badge {
+  min-width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.nav-badge {
+  margin-left: auto;
+  background: #d84a2a;
+}
+
 .nav-tab:hover,
 .nav-tab.active {
   background: #21313a;
@@ -473,6 +493,25 @@ h3 {
   background: #fbfcfc;
 }
 
+.clickable-card {
+  cursor: pointer;
+  transition:
+    transform 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease;
+}
+
+.clickable-card:hover {
+  border-color: rgba(163, 58, 36, 0.38);
+  box-shadow: 0 18px 44px rgba(43, 26, 18, 0.13);
+  transform: translateY(-1px);
+}
+
+.clickable-card:focus-visible {
+  outline: 3px solid rgba(8, 122, 163, 0.26);
+  outline-offset: 3px;
+}
+
 .metric span {
   color: var(--muted);
   font-size: 13px;
@@ -480,8 +519,21 @@ h3 {
 }
 
 .metric strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 28px;
   line-height: 1;
+}
+
+.metric-badge {
+  transform: translateY(-1px);
+}
+
+.title-with-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .metric small {
