@@ -1329,7 +1329,7 @@ function savePersonalDetails(event) {
   saveData();
   syncCurrentEmployeeFromAuth();
   syncSaveStatus("Personal details saved");
-  render();
+  navigateToView("dashboard");
 }
 
 function deleteMessage(messageId) {
