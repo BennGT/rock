@@ -627,6 +627,10 @@ function renderDashboard() {
   return `
     <div class="dashboard-grid">
       <div>
+        <section class="today-brand-card" aria-label="Sherif app home">
+          <img src="assets/rnw-logo.png" alt="Rock N Water Landscapes" />
+        </section>
+
         <div class="metric-grid">
           ${metric("On today", todayShifts.length, "Scheduled shifts")}
           ${metric("Open shifts", openShifts, "Need coverage")}

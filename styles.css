@@ -408,6 +408,24 @@ h3 {
   gap: 18px;
 }
 
+.today-brand-card {
+  display: none;
+  margin-bottom: 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 230, 223, 0.72)),
+    #ffffff;
+  box-shadow: var(--shadow);
+}
+
+.today-brand-card img {
+  display: block;
+  width: min(360px, 82%);
+  height: auto;
+  margin: 0 auto;
+}
+
 .panel {
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1164,6 +1182,13 @@ textarea {
     padding: 14px 10px 18px;
   }
 
+  .today-brand-card {
+    min-height: 154px;
+    display: grid;
+    place-items: center;
+    padding: 20px 14px;
+  }
+
   .sidebar {
     gap: 12px;
     padding: 14px 10px;
@@ -1222,6 +1247,10 @@ textarea {
   .config-row,
   .message-compose {
     grid-template-columns: 1fr;
+  }
+
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .shift-main,
