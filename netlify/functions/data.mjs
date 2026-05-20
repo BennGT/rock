@@ -21,7 +21,7 @@ export default async function handler(request) {
 
     if (request.method === "GET") {
       const data = await store.get("shared-data", { type: "json" });
-      return json(200, { data: data || null });
+      return json(200, { data: data ? dataForUser(data, user) : null });
     }
 
     if (request.method === "POST") {
@@ -89,9 +89,27 @@ function mergeEmployeeData(currentData, incomingData, user) {
       };
     });
 
+  const incomingEmployees = Array.isArray(incomingData.employees) ? incomingData.employees : [];
+  const incomingEmployee = incomingEmployees.find((employee) => employee.id === employeeId);
+  const currentEmployees = Array.isArray(currentData.employees) ? currentData.employees : [];
+  const employees = incomingEmployee
+    ? currentEmployees.map((employee) => {
+        if (employee.id !== employeeId) return employee;
+        return {
+          ...employee,
+          name: cleanText(incomingEmployee.name) || employee.name,
+          initials: cleanText(incomingEmployee.initials).slice(0, 3).toUpperCase() || employee.initials,
+          phone: cleanText(incomingEmployee.phone),
+          nextOfKinName: cleanText(incomingEmployee.nextOfKinName),
+          nextOfKinPhone: cleanText(incomingEmployee.nextOfKinPhone),
+        };
+      })
+    : currentEmployees;
+
   return {
     ...currentData,
     deletedMessageIds,
+    employees,
     messages: [...currentMessages, ...newOwnMessages].filter((message) => !deletedMessageIds.includes(message.id)),
     requests: [...ownRequests, ...otherRequests],
     savedAt: incomingData.savedAt || currentData.savedAt,
@@ -101,6 +119,39 @@ function mergeEmployeeData(currentData, incomingData, user) {
 function findEmployeeIdForUser(data, user) {
   const employees = Array.isArray(data.employees) ? data.employees : [];
   return employees.find((employee) => normalizeEmail(employee.email) === normalizeEmail(user.email))?.id || null;
+}
+
+function dataForUser(data, user) {
+  if (user.role === "admin") return data;
+
+  const employeeId = findEmployeeIdForUser(data, user);
+  const employees = Array.isArray(data.employees) ? data.employees : [];
+
+  return {
+    ...data,
+    currentUserId: employeeId,
+    employees: employees.map((employee) => {
+      if (employee.id === employeeId) return employee;
+      return {
+        id: employee.id,
+        name: employee.name,
+        initials: employee.initials,
+        role: employee.role,
+        status: employee.status,
+        color: employee.color,
+        email: "",
+        phone: "",
+        nextOfKinName: "",
+        nextOfKinPhone: "",
+      };
+    }),
+    shifts: Array.isArray(data.shifts) ? data.shifts.filter((shift) => shift.published) : [],
+    requests: Array.isArray(data.requests) ? data.requests.filter((request) => request.employeeId === employeeId) : [],
+  };
+}
+
+function cleanText(value) {
+  return String(value || "").trim();
 }
 
 function normalizeEmail(email) {

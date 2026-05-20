@@ -1122,10 +1122,10 @@ function renderRequestItem(request, editable = false) {
 
 function renderStaffItem(employee) {
   const nextShift = state.data.shifts
-    .filter((shift) => shift.employeeId === employee.id && shift.date >= toDateKey(new Date()))
+    .filter((shift) => shift.employeeId === employee.id && shift.date >= toDateKey(new Date()) && canSeeShift(shift))
     .sort((a, b) => `${a.date} ${a.start}`.localeCompare(`${b.date} ${b.start}`))[0];
   const employeeColor = employee.color || colorForEmployee(employee.id);
-  const canSeeEmergency = isAdmin() || employee.id === state.data.currentUserId;
+  const canSeePrivateDetails = isAdmin() || employee.id === state.data.currentUserId;
 
   return `
     <article class="staff-item" style="border-left-color: ${employeeColor}">
@@ -1139,11 +1139,11 @@ function renderStaffItem(employee) {
         </div>
         ${statusPill(employee.status)}
       </div>
-      <div class="staff-meta">
+      ${canSeePrivateDetails ? `<div class="staff-meta">
         <span>${employee.email || "No email saved"}</span>
         <span>${employee.phone || "No phone saved"}</span>
-      </div>
-      ${canSeeEmergency ? `<div class="staff-meta">
+      </div>` : ""}
+      ${canSeePrivateDetails ? `<div class="staff-meta">
         <span>Next of kin: ${employee.nextOfKinName || "Not saved"}${employee.nextOfKinPhone ? `, ${employee.nextOfKinPhone}` : ""}</span>
       </div>` : ""}
       <div class="staff-meta">
