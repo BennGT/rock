@@ -1,4 +1,4 @@
-const cacheName = "sherif-app-v37";
+const cacheName = "sherif-app-v38";
 const appShell = [
   "./",
   "./index.html",
@@ -51,7 +51,7 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const targetUrl = event.notification.data?.url || "./index.html";
+  const targetUrl = new URL(event.notification.data?.url || "./index.html", self.location.origin).href;
   event.waitUntil(
     clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {

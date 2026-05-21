@@ -222,6 +222,7 @@ function bindChrome() {
       `${findEmployee(shift.employeeId).name}: ${formatDateShort(parseDateKey(shift.date))}, ${shift.start} to ${shift.end}`,
       false,
       shift.published,
+      { url: "/?page=schedule" },
     );
     closeShiftModal();
     render();
@@ -236,7 +237,7 @@ function bindChrome() {
     const shift = state.data.shifts.find((item) => item.id === state.editingShiftId);
     state.data.shifts = state.data.shifts.filter((shift) => shift.id !== state.editingShiftId);
     saveData();
-    if (shift) notifyTeam("Shift removed", `${findEmployee(shift.employeeId).name}: ${formatDateShort(parseDateKey(shift.date))}`);
+    if (shift) notifyTeam("Shift removed", `${findEmployee(shift.employeeId).name}: ${formatDateShort(parseDateKey(shift.date))}`, false, false, { url: "/?page=schedule" });
     closeShiftModal();
     render();
   });
@@ -275,7 +276,7 @@ function bindChrome() {
 
     state.data.currentUserId = employee.id;
     saveData();
-    notifyTeam(isNew ? "Employee added" : "Employee updated", `${employee.name} - ${employee.role}`);
+    notifyTeam(isNew ? "Employee added" : "Employee updated", `${employee.name} - ${employee.role}`, false, false, { url: "/?page=staff" });
     hydrateUserSelect();
     closeEmployeeModal();
     render();
@@ -297,7 +298,7 @@ function bindChrome() {
     state.data.messages = state.data.messages.filter((message) => message.employeeId !== state.editingEmployeeId);
     state.data.currentUserId = null;
     saveData();
-    notifyTeam("Employee removed", employee.name);
+    notifyTeam("Employee removed", employee.name, false, false, { url: "/?page=staff" });
     hydrateUserSelect();
     closeEmployeeModal();
     render();
@@ -436,7 +437,7 @@ function bindViewEvents() {
   });
 
   appView.querySelectorAll("[data-action='test-notification']").forEach((button) => {
-    button.addEventListener("click", () => notifyTeam("Sherif notifications are on", "Schedule and message alerts can appear on this device.", true));
+    button.addEventListener("click", () => notifyTeam("Sherif notifications are on", "Schedule and message alerts can appear on this device.", true, false, { url: "/" }));
   });
 
   const personalDetailsForm = appView.querySelector("#personalDetailsForm");
@@ -495,7 +496,7 @@ function bindViewEvents() {
       if (!request) return;
       request.status = select.value;
       saveData();
-      notifyTeam("Request updated", `${findEmployee(request.employeeId).name}: ${request.type} ${request.status}`);
+      notifyTeam("Request updated", `${findEmployee(request.employeeId).name}: ${request.type} ${request.status}`, false, false, { url: "/?page=requests" });
       render();
     });
   });
@@ -521,7 +522,7 @@ function bindViewEvents() {
       state.data.messages = state.data.messages.filter((message) => message.channel !== channelId);
       if (state.data.activeChannel === channelId) state.data.activeChannel = state.data.channels[0].id;
       saveData();
-      notifyTeam("Channel removed", channel.name);
+      notifyTeam("Channel removed", channel.name, false, false, { url: "/?page=messages" });
       render();
     });
   });
@@ -594,7 +595,7 @@ function bindViewEvents() {
       });
       requestForm.reset();
       saveData();
-      notifyTeam("Staff request submitted", `${getCurrentUser().name}: ${formData.get("type")}`);
+      notifyTeam("Staff request submitted", `${getCurrentUser().name}: ${formData.get("type")}`, false, true, { url: "/?page=requests", excludeUserId: state.authUser?.id });
       render();
     });
   }
@@ -621,7 +622,7 @@ function bindViewEvents() {
       if (!area || state.data.areas.includes(area)) return;
       state.data.areas.push(area);
       saveData();
-      notifyTeam("Work area added", area);
+      notifyTeam("Work area added", area, false, false, { url: "/?page=setup" });
       render();
     });
   }
@@ -639,7 +640,7 @@ function bindViewEvents() {
         description: formData.get("description").trim() || "Team discussion",
       });
       saveData();
-      notifyTeam("Channel added", name);
+      notifyTeam("Channel added", name, false, false, { url: "/?page=messages" });
       render();
     });
   }
@@ -653,7 +654,7 @@ function bindViewEvents() {
       channel.name = formData.get("name").trim() || channel.name;
       channel.description = formData.get("description").trim() || "Team discussion";
       saveData();
-      notifyTeam("Channel updated", channel.name);
+      notifyTeam("Channel updated", channel.name, false, false, { url: "/?page=messages" });
       render();
     });
   });
@@ -1769,7 +1770,7 @@ function pasteShift(date) {
 
   state.data.shifts.push(pastedShift);
   saveData();
-  notifyTeam("Shift pasted", `${findEmployee(pastedShift.employeeId).name}: ${formatDateShort(parseDateKey(date))}, ${pastedShift.start} to ${pastedShift.end}`);
+  notifyTeam("Shift pasted", `${findEmployee(pastedShift.employeeId).name}: ${formatDateShort(parseDateKey(date))}, ${pastedShift.start} to ${pastedShift.end}`, false, false, { url: "/?page=schedule" });
   syncSaveStatus("Shift pasted");
   render();
 }
@@ -1789,7 +1790,7 @@ function publishCurrentWeek() {
   });
 
   saveData();
-  notifyTeam("Schedule published", `${formatDateShort(state.weekStart)} to ${formatDateShort(addDays(state.weekStart, 6))}`, false, true);
+  notifyTeam("Schedule published", `${formatDateShort(state.weekStart)} to ${formatDateShort(addDays(state.weekStart, 6))}`, false, true, { url: "/?page=schedule" });
   syncSaveStatus("Week published to employees");
   render();
 }
@@ -2415,14 +2416,14 @@ async function requestNotifications() {
   if (permission === "granted") {
     await registerPushSubscription();
     sendUpcomingShiftReminder();
-    notifyTeam("Sherif notifications enabled", "This device can receive Sherif alerts.", true);
+    notifyTeam("Sherif notifications enabled", "This device can receive Sherif alerts.", true, false, { url: "/" });
   } else {
     syncSaveStatus("Notifications not enabled");
   }
 }
 
-function notifyTeam(title, body, force = false, sendPush = false) {
-  if (sendPush) sendPushAlert(title, body);
+function notifyTeam(title, body, force = false, sendPush = false, routeOptions = {}) {
+  if (sendPush) sendPushAlert(title, body, routeOptions);
 
   if (!force && !state.data.notificationsEnabled) return;
   if (!supportsNotifications() || window.Notification.permission !== "granted") {
@@ -2430,21 +2431,24 @@ function notifyTeam(title, body, force = false, sendPush = false) {
     return;
   }
 
-  const options = {
+  const notificationOptions = {
     body,
     icon: "assets/marshal-icon-192.png",
     badge: "assets/marshal-icon-192.png",
     tag: `marshal-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+    data: {
+      url: routeOptions.url || "/",
+    },
   };
 
   if (typeof navigator !== "undefined" && "serviceWorker" in navigator) {
     navigator.serviceWorker.ready
-      .then((registration) => registration.showNotification(title, options))
-      .catch(() => new window.Notification(title, options));
+      .then((registration) => registration.showNotification(title, notificationOptions))
+      .catch(() => new window.Notification(title, notificationOptions));
     return;
   }
 
-  new window.Notification(title, options);
+  new window.Notification(title, notificationOptions);
 }
 
 function sendUpcomingShiftReminder() {
@@ -2466,7 +2470,7 @@ function sendUpcomingShiftReminder() {
 
   reminders.push(reminderId);
   localStorage.setItem(shiftReminderKey, JSON.stringify(reminders.slice(-100)));
-  notifyTeam("Upcoming shift", `${nextShift.area}, ${formatDateShort(parseDateKey(nextShift.date))}, ${nextShift.start} to ${nextShift.end}`, true);
+  notifyTeam("Upcoming shift", `${nextShift.area}, ${formatDateShort(parseDateKey(nextShift.date))}, ${nextShift.start} to ${nextShift.end}`, true, false, { url: "/?page=schedule" });
 }
 
 function loadReminderIds() {
@@ -2701,7 +2705,7 @@ function notifyForReceivedMessages(nextData) {
 
   const latest = received[received.length - 1];
   const sender = nextData.employees.find((employee) => employee.id === latest.employeeId) || findEmployee(latest.employeeId);
-  notifyTeam(`New message from ${sender.name}`, latest.body || "Sent a photo", true, false);
+  notifyTeam(`New message from ${sender.name}`, latest.body || "Sent a photo", true, false, { url: "/?page=messages" });
 }
 
 function startCloudRefresh() {
