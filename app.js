@@ -966,7 +966,7 @@ function renderStaff() {
             </label>
             <label>
               End date
-              <input name="endDate" type="date" />
+              <input name="endDate" type="date" required />
             </label>
             <label>
               Start time
@@ -1308,18 +1308,13 @@ function renderMessageMedia(media) {
 
 function renderRequestItem(request, editable = false) {
   const employee = findEmployee(request.employeeId);
-  const startDate = request.startDate || request.date;
-  const endDate = request.endDate || request.date;
-  const dateLabel = endDate && endDate !== startDate
-    ? `${formatDateShort(parseDateKey(startDate))} to ${formatDateShort(parseDateKey(endDate))}`
-    : formatDateShort(parseDateKey(startDate));
-  const timeLabel = request.startTime || request.endTime ? `${request.startTime || "Start"} to ${request.endTime || "End"}` : "All day";
+  const timing = getRequestTiming(request);
   return `
     <article class="request-item">
       <div class="request-main">
         <div>
           <strong>${request.type}</strong>
-          <div class="request-meta">${employee.name} - ${dateLabel}</div>
+          <div class="request-meta">${employee.name} - ${timing.rangeLabel}</div>
         </div>
         ${
           editable
@@ -1330,13 +1325,95 @@ function renderRequestItem(request, editable = false) {
         }
       </div>
       <div class="request-detail-grid">
-        <span><strong>Dates</strong>${dateLabel}</span>
-        <span><strong>Times</strong>${timeLabel}</span>
+        <span><strong>Start</strong>${timing.startLabel}</span>
+        <span><strong>End</strong>${timing.endLabel}</span>
+        <span><strong>Duration</strong>${timing.durationLabel}</span>
         <span><strong>Status</strong>${request.status}</span>
       </div>
       ${request.detail ? `<div class="request-meta">${escapeHtml(request.detail)}</div>` : ""}
     </article>
   `;
+}
+
+function getRequestTiming(request) {
+  const startDate = request.startDate || request.date || request.endDate;
+  const endDate = request.endDate || request.date || startDate;
+  const startTime = request.startTime || "";
+  const endTime = request.endTime || "";
+  const hasTimes = Boolean(startTime || endTime);
+
+  if (!startDate) {
+    return {
+      rangeLabel: "No dates saved",
+      startLabel: "Not set",
+      endLabel: "Not set",
+      durationLabel: "Not available",
+    };
+  }
+
+  const startLabel = `${formatDateFull(parseDateKey(startDate))}${startTime ? `, ${formatClock(startTime)}` : ""}`;
+  const endLabel = `${formatDateFull(parseDateKey(endDate))}${endTime ? `, ${formatClock(endTime)}` : ""}`;
+  const rangeLabel = endDate && endDate !== startDate
+    ? `${formatDateShort(parseDateKey(startDate))} to ${formatDateShort(parseDateKey(endDate))}`
+    : formatDateShort(parseDateKey(startDate));
+
+  return {
+    rangeLabel,
+    startLabel,
+    endLabel,
+    durationLabel: hasTimes ? formatTimedRequestDuration(startDate, endDate, startTime, endTime) : formatAllDayRequestDuration(startDate, endDate),
+  };
+}
+
+function formatAllDayRequestDuration(startDate, endDate) {
+  const start = parseDateKey(startDate);
+  const end = parseDateKey(endDate || startDate);
+  const totalDays = Math.floor((end - start) / (24 * 60 * 60 * 1000)) + 1;
+  if (totalDays < 1) return "Check dates";
+  const label = formatMonthsDays(totalDays);
+  return totalDays >= 30 ? `${label} (${totalDays} days total)` : label;
+}
+
+function formatTimedRequestDuration(startDate, endDate, startTime, endTime) {
+  const start = parseDateTime(startDate, startTime || "00:00");
+  const end = parseDateTime(endDate || startDate, endTime || "23:59");
+  const totalMinutes = Math.max(0, Math.round((end - start) / (60 * 1000)));
+  if (!totalMinutes) return "Check times";
+
+  const totalDays = Math.floor(totalMinutes / (24 * 60));
+  const months = Math.floor(totalDays / 30);
+  const days = totalDays % 30;
+  const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+  const minutes = totalMinutes % 60;
+  const parts = [];
+  if (months) parts.push(`${months} month${months === 1 ? "" : "s"}`);
+  if (days) parts.push(`${days} day${days === 1 ? "" : "s"}`);
+  if (hours) parts.push(`${hours} hour${hours === 1 ? "" : "s"}`);
+  if (minutes) parts.push(`${minutes} min${minutes === 1 ? "" : "s"}`);
+  return parts.join(", ");
+}
+
+function formatMonthsDays(totalDays) {
+  const months = Math.floor(totalDays / 30);
+  const days = totalDays % 30;
+  const parts = [];
+  if (months) parts.push(`${months} month${months === 1 ? "" : "s"}`);
+  if (days) parts.push(`${days} day${days === 1 ? "" : "s"}`);
+  return parts.join(", ") || "0 days";
+}
+
+function parseDateTime(dateKey, timeValue) {
+  const [hours, minutes] = String(timeValue || "00:00").split(":").map(Number);
+  const date = parseDateKey(dateKey);
+  date.setHours(Number.isFinite(hours) ? hours : 0, Number.isFinite(minutes) ? minutes : 0, 0, 0);
+  return date;
+}
+
+function formatClock(timeValue) {
+  return new Intl.DateTimeFormat("en-AU", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(parseDateTime("2000-01-01", timeValue));
 }
 
 function renderStaffItem(employee) {
@@ -2946,6 +3023,14 @@ function formatDateShort(date) {
   return new Intl.DateTimeFormat("en-AU", {
     day: "numeric",
     month: "short",
+  }).format(new Date(date));
+}
+
+function formatDateFull(date) {
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
   }).format(new Date(date));
 }
 
