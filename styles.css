@@ -1131,6 +1131,26 @@ textarea {
   line-height: 1.45;
 }
 
+.message-media {
+  margin: 10px 0 0;
+}
+
+.message-media img {
+  max-width: min(340px, 100%);
+  max-height: 320px;
+  display: block;
+  border-radius: 8px;
+  object-fit: contain;
+  background: #ffffff;
+}
+
+.message-media figcaption {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .message-actions {
   display: flex;
   justify-content: flex-end;
@@ -1139,10 +1159,56 @@ textarea {
 
 .message-compose {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: 10px;
   padding: 14px;
   border-top: 1px solid var(--line);
+}
+
+.media-picker {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.media-picker input {
+  position: absolute;
+  width: 1px;
+  min-height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.request-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.request-detail-grid span {
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+  border-radius: 7px;
+  background: #fbfcfc;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.request-detail-grid strong {
+  color: var(--ink);
+  font-size: 11px;
+  text-transform: uppercase;
 }
 
 .staff-list {
@@ -1376,6 +1442,11 @@ textarea {
 
   .message-compose button {
     width: 100%;
+  }
+
+  .media-picker,
+  .request-detail-grid {
+    grid-template-columns: 1fr;
   }
 
   .messages-layout {

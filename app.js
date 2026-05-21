@@ -39,6 +39,7 @@ const state = {
   setupRequired: false,
   data: loadData(),
 };
+state.seenMessageIds = new Set((state.data.messages || []).map((message) => message.id).filter(Boolean));
 
 const views = {
   dashboard: "Home",
@@ -87,10 +88,13 @@ const deleteShiftButton = document.querySelector("#deleteShiftButton");
 const employeeModal = document.querySelector("#employeeModal");
 const employeeForm = document.querySelector("#employeeForm");
 const deleteEmployeeButton = document.querySelector("#deleteEmployeeButton");
+let menuTouchStartX = 0;
+let menuTouchStartY = 0;
 
 init();
 
 function init() {
+  if (state.authToken && !state.inviteToken) authScreen.classList.add("hidden");
   state.view = readViewFromUrl();
   todayLabel.textContent = formatLongDate(new Date());
   syncShell();
@@ -125,6 +129,30 @@ function bindChrome() {
   appMenu.addEventListener("click", (event) => {
     if (event.target.closest("[data-view]")) closeMenu();
   });
+
+  appMenu.addEventListener(
+    "touchstart",
+    (event) => {
+      const touch = event.touches[0];
+      menuTouchStartX = touch.clientX;
+      menuTouchStartY = touch.clientY;
+    },
+    { passive: true },
+  );
+
+  appMenu.addEventListener(
+    "touchmove",
+    (event) => {
+      if (!document.body.classList.contains("menu-open")) return;
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - menuTouchStartX;
+      const deltaY = touch.clientY - menuTouchStartY;
+      if (deltaX < -55 && Math.abs(deltaX) > Math.abs(deltaY) * 1.4) {
+        closeMenu();
+      }
+    },
+    { passive: true },
+  );
 
   backupFileInput.addEventListener("change", importBackup);
   authForm.addEventListener("submit", submitAuth);
@@ -492,26 +520,44 @@ function bindViewEvents() {
 
   const messageForm = appView.querySelector("#messageForm");
   if (messageForm) {
-    messageForm.addEventListener("submit", (event) => {
+    messageForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!state.data.currentUserId) {
         syncSaveStatus("Add an employee before sending messages", true);
         return;
       }
 
-      const input = messageForm.querySelector("input");
+      const input = messageForm.elements.body;
       const text = input.value.trim();
-      if (!text) return;
-      state.data.messages.push({
+      const mediaFile = messageForm.elements.media?.files?.[0] || null;
+      if (!text && !mediaFile) return;
+      if (mediaFile && !mediaFile.type.startsWith("image/")) {
+        syncSaveStatus("Photos and GIFs only for now", true);
+        return;
+      }
+      if (mediaFile && mediaFile.size > 2 * 1024 * 1024) {
+        syncSaveStatus("Image must be under 2 MB", true);
+        return;
+      }
+
+      const media = mediaFile ? await readFileAsDataUrl(mediaFile) : null;
+      const message = {
         id: crypto.randomUUID(),
         channel: teamChannel.id,
         employeeId: state.data.currentUserId,
         body: text,
+        media,
         createdAt: new Date().toISOString(),
-      });
+      };
+      state.data.messages.push(message);
+      state.seenMessageIds.add(message.id);
       input.value = "";
+      if (messageForm.elements.media) messageForm.elements.media.value = "";
       saveData();
-      notifyTeam(`New message in ${getActiveChannel().name}`, text, false, true);
+      sendPushAlert("New Sherif message", `${getCurrentUser().name}: ${text || "sent a photo"}`, {
+        excludeUserId: state.authUser?.id,
+        url: "/?page=messages",
+      });
       render();
     });
   }
@@ -530,7 +576,11 @@ function bindViewEvents() {
         id: crypto.randomUUID(),
         employeeId: state.data.currentUserId,
         type: formData.get("type"),
-        date: formData.get("date"),
+        date: formData.get("startDate"),
+        startDate: formData.get("startDate"),
+        endDate: formData.get("endDate") || formData.get("startDate"),
+        startTime: formData.get("startTime"),
+        endTime: formData.get("endTime"),
         detail: formData.get("detail"),
         status: "Pending",
       });
@@ -614,6 +664,22 @@ function saveInviteDraft(event) {
 
 function closeMenu() {
   document.body.classList.remove("menu-open");
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => {
+      resolve({
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        dataUrl: reader.result,
+      });
+    });
+    reader.addEventListener("error", () => reject(reader.error || new Error("File could not be read")));
+    reader.readAsDataURL(file);
+  });
 }
 
 function navigateToView(view, options = {}) {
@@ -858,7 +924,11 @@ function renderMessages() {
           ${messages.length ? messages.map(renderMessage).join("") : `<div class="empty-state">No messages yet.</div>`}
         </div>
         <form class="message-compose" id="messageForm">
-          <input type="text" placeholder="${state.data.currentUserId ? "Write a message" : "Add an employee before messaging"}" aria-label="Message" autocomplete="off" ${state.data.currentUserId ? "" : "disabled"} />
+          <input name="body" type="text" placeholder="${state.data.currentUserId ? "Write a message" : "Add an employee before messaging"}" aria-label="Message" autocomplete="off" ${state.data.currentUserId ? "" : "disabled"} />
+          <label class="media-picker">
+            <span>Add photo/GIF</span>
+            <input name="media" type="file" accept="image/*" ${state.data.currentUserId ? "" : "disabled"} />
+          </label>
           <button class="primary-button" type="submit" ${state.data.currentUserId ? "" : "disabled"}>Send</button>
         </form>
       </div>
@@ -891,8 +961,20 @@ function renderStaff() {
               </select>
             </label>
             <label>
-              Date
-              <input name="date" type="date" required />
+              Start date
+              <input name="startDate" type="date" required />
+            </label>
+            <label>
+              End date
+              <input name="endDate" type="date" />
+            </label>
+            <label>
+              Start time
+              <input name="startTime" type="time" />
+            </label>
+            <label>
+              End time
+              <input name="endTime" type="time" />
             </label>
             <label>
               Detail
@@ -1187,21 +1269,22 @@ function renderCompactMessage(message) {
         <span>${employee.name}</span>
         <span>${formatTime(message.createdAt)}</span>
       </div>
-      <p>${escapeHtml(message.body)}</p>
+      <p>${escapeHtml(message.body || (message.media ? "Sent a photo" : ""))}</p>
     </article>
   `;
 }
 
 function renderMessage(message) {
   const employee = findEmployee(message.employeeId);
-  const canDelete = isScheduleAdmin() || message.employeeId === state.data.currentUserId;
+  const canDelete = isScheduleAdmin();
   return `
     <article class="message-item ${message.employeeId === state.data.currentUserId ? "own" : ""}">
       <div class="message-head">
         <span>${employee.name}</span>
         <span>${formatMessageDate(message.createdAt)}</span>
       </div>
-      <p>${escapeHtml(message.body)}</p>
+      ${message.body ? `<p>${escapeHtml(message.body)}</p>` : ""}
+      ${renderMessageMedia(message.media)}
       ${
         canDelete
           ? `<div class="message-actions">
@@ -1213,14 +1296,30 @@ function renderMessage(message) {
   `;
 }
 
+function renderMessageMedia(media) {
+  if (!media?.dataUrl) return "";
+  return `
+    <figure class="message-media">
+      <img src="${escapeHtml(media.dataUrl)}" alt="${escapeHtml(media.name || "Message attachment")}" loading="lazy" />
+      ${media.name ? `<figcaption>${escapeHtml(media.name)}</figcaption>` : ""}
+    </figure>
+  `;
+}
+
 function renderRequestItem(request, editable = false) {
   const employee = findEmployee(request.employeeId);
+  const startDate = request.startDate || request.date;
+  const endDate = request.endDate || request.date;
+  const dateLabel = endDate && endDate !== startDate
+    ? `${formatDateShort(parseDateKey(startDate))} to ${formatDateShort(parseDateKey(endDate))}`
+    : formatDateShort(parseDateKey(startDate));
+  const timeLabel = request.startTime || request.endTime ? `${request.startTime || "Start"} to ${request.endTime || "End"}` : "All day";
   return `
     <article class="request-item">
       <div class="request-main">
         <div>
           <strong>${request.type}</strong>
-          <div class="request-meta">${employee.name} - ${formatDateShort(parseDateKey(request.date))}</div>
+          <div class="request-meta">${employee.name} - ${dateLabel}</div>
         </div>
         ${
           editable
@@ -1229,6 +1328,11 @@ function renderRequestItem(request, editable = false) {
               </select>`
             : statusPill(request.status)
         }
+      </div>
+      <div class="request-detail-grid">
+        <span><strong>Dates</strong>${dateLabel}</span>
+        <span><strong>Times</strong>${timeLabel}</span>
+        <span><strong>Status</strong>${request.status}</span>
       </div>
       ${request.detail ? `<div class="request-meta">${escapeHtml(request.detail)}</div>` : ""}
     </article>
@@ -1339,8 +1443,8 @@ function savePersonalDetails(event) {
 function deleteMessage(messageId) {
   const message = state.data.messages.find((item) => item.id === messageId);
   if (!message) return;
-  if (!isAdmin() && message.employeeId !== state.data.currentUserId) {
-    syncSaveStatus("You can only delete your own messages", true);
+  if (!isScheduleAdmin()) {
+    syncSaveStatus("Only admins can delete messages", true);
     return;
   }
 
@@ -2284,7 +2388,7 @@ async function registerPushSubscription() {
   }
 }
 
-async function sendPushAlert(title, body) {
+async function sendPushAlert(title, body, options = {}) {
   if (!state.authToken || !canUseCloudSync()) return;
 
   try {
@@ -2295,6 +2399,8 @@ async function sendPushAlert(title, body) {
         action: "notify",
         title,
         body,
+        url: options.url || "/",
+        excludeUserId: options.excludeUserId || null,
       }),
     });
   } catch (error) {
@@ -2427,7 +2533,9 @@ async function loadCloudData(options = {}) {
         return;
       }
 
-      state.data = normalizeData(payload.data);
+      const nextData = normalizeData(payload.data);
+      notifyForReceivedMessages(nextData);
+      state.data = nextData;
       saveData({ syncCloud: false });
       syncShell();
       syncInstallButton();
@@ -2446,6 +2554,22 @@ async function loadCloudData(options = {}) {
     syncSaveStatus();
     console.error(error);
   }
+}
+
+function notifyForReceivedMessages(nextData) {
+  const ownEmployeeId = getOwnEmployeeProfile().id || state.data.currentUserId;
+  const incomingMessages = Array.isArray(nextData.messages) ? nextData.messages : [];
+  const newMessages = incomingMessages.filter((message) => message.id && !state.seenMessageIds.has(message.id));
+  incomingMessages.forEach((message) => {
+    if (message.id) state.seenMessageIds.add(message.id);
+  });
+
+  const received = newMessages.filter((message) => message.employeeId !== ownEmployeeId);
+  if (!received.length) return;
+
+  const latest = received[received.length - 1];
+  const sender = nextData.employees.find((employee) => employee.id === latest.employeeId) || findEmployee(latest.employeeId);
+  notifyTeam(`New message from ${sender.name}`, latest.body || "Sent a photo", true, false);
 }
 
 function startCloudRefresh() {
@@ -2607,7 +2731,7 @@ function normalizeData(data) {
   merged.deletedMessageIds = Array.isArray(data.deletedMessageIds) ? data.deletedMessageIds : [];
   merged.messages = (Array.isArray(data.messages) ? data.messages : defaults.messages)
     .filter((message) => !merged.deletedMessageIds.includes(message.id))
-    .map((message) => ({ ...message, channel: teamChannel.id }));
+    .map((message) => ({ ...message, channel: teamChannel.id, media: message.media || null }));
   merged.requests = Array.isArray(data.requests) ? data.requests : defaults.requests;
   merged.areas = Array.isArray(data.areas) && data.areas.length ? data.areas : inferAreas(merged, defaults.areas);
   merged.businessName = !data.businessName || data.businessName === "ShiftLink" || data.businessName === "Marshal" ? defaults.businessName : data.businessName;

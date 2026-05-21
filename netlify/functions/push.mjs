@@ -54,14 +54,19 @@ export default async function handler(request) {
       const message = JSON.stringify({
         title: String(body.title || "Sherif"),
         body: String(body.body || ""),
-        url: "/",
+        url: String(body.url || "/"),
       });
+      const excludeUserId = body.excludeUserId ? String(body.excludeUserId) : "";
 
       const validSubscriptions = [];
       let sent = 0;
 
       await Promise.all(
         subscriptions.map(async (item) => {
+          if (excludeUserId && item.userId === excludeUserId) {
+            validSubscriptions.push(item);
+            return;
+          }
           try {
             await webpush.sendNotification(item.subscription, message);
             validSubscriptions.push(item);

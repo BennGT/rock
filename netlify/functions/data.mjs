@@ -89,7 +89,7 @@ function mergeEmployeeData(currentData, incomingData, user) {
 
   const currentMessages = Array.isArray(currentData.messages) ? currentData.messages : [];
   const incomingMessages = Array.isArray(incomingData.messages) ? incomingData.messages : [];
-  const deletedMessageIds = mergeDeletedIds(currentData.deletedMessageIds, incomingData.deletedMessageIds);
+  const deletedMessageIds = Array.isArray(currentData.deletedMessageIds) ? currentData.deletedMessageIds : [];
   const currentMessageIds = new Set(currentMessages.map((message) => message.id));
   const newOwnMessages = incomingMessages.filter(
     (message) => message.employeeId === employeeId && message.id && !currentMessageIds.has(message.id) && !deletedMessageIds.includes(message.id),
