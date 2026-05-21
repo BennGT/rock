@@ -1055,6 +1055,12 @@ textarea {
   box-shadow: var(--shadow);
 }
 
+.requests-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.75fr) minmax(0, 1.25fr);
+  gap: 18px;
+}
+
 .channel-list {
   display: grid;
   align-content: start;
@@ -1152,6 +1158,12 @@ textarea {
 }
 
 .message-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 10px;
+}
+
+.request-actions {
   display: flex;
   justify-content: flex-end;
   margin-top: 10px;
@@ -1297,6 +1309,7 @@ textarea {
   }
 
   .dashboard-grid,
+  .requests-layout,
   .staff-layout,
   .setup-layout {
     grid-template-columns: 1fr;

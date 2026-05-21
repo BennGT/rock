@@ -46,6 +46,7 @@ const views = {
   schedule: "Schedule",
   messages: "Messages",
   staff: "Staff",
+  requests: "Requests",
   mydetails: "My details",
   setup: "Account",
 };
@@ -290,7 +291,9 @@ function bindChrome() {
     if (typeof confirm === "function" && !confirm(`Delete ${employee.name}? Their shifts, messages, and requests will also be removed.`)) return;
     state.data.employees = state.data.employees.filter((item) => item.id !== state.editingEmployeeId);
     state.data.shifts = state.data.shifts.filter((shift) => shift.employeeId !== state.editingEmployeeId);
+    const removedRequestIds = state.data.requests.filter((request) => request.employeeId === state.editingEmployeeId).map((request) => request.id);
     state.data.requests = state.data.requests.filter((request) => request.employeeId !== state.editingEmployeeId);
+    state.data.deletedRequestIds = Array.from(new Set([...(state.data.deletedRequestIds || []), ...removedRequestIds]));
     state.data.messages = state.data.messages.filter((message) => message.employeeId !== state.editingEmployeeId);
     state.data.currentUserId = null;
     saveData();
@@ -306,7 +309,7 @@ function render() {
   document.querySelectorAll(".nav-tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === state.view);
     tab.querySelector(".nav-badge")?.remove();
-    const badgeCount = tab.dataset.view === "staff" ? pendingRequestCount() : 0;
+    const badgeCount = tab.dataset.view === "requests" ? pendingRequestCount() : 0;
     if (badgeCount) {
       tab.insertAdjacentHTML("beforeend", `<span class="nav-badge">${badgeCount}</span>`);
     }
@@ -319,6 +322,7 @@ function render() {
     schedule: renderSchedule,
     messages: renderMessages,
     staff: renderStaff,
+    requests: renderRequests,
     mydetails: renderMyDetails,
     setup: renderSetup,
   }[state.view];
@@ -398,6 +402,10 @@ function bindViewEvents() {
 
   appView.querySelectorAll("[data-delete-message-id]").forEach((button) => {
     button.addEventListener("click", () => deleteMessage(button.dataset.deleteMessageId));
+  });
+
+  appView.querySelectorAll("[data-delete-request-id]").forEach((button) => {
+    button.addEventListener("click", () => deleteRequest(button.dataset.deleteRequestId));
   });
 
   appView.querySelectorAll("[data-action='new-employee']").forEach((button) => {
@@ -811,7 +819,7 @@ function openDashboardLink(link) {
   }
 
   if (link === "requests") {
-    navigateToView("staff");
+    navigateToView("requests");
     return;
   }
 
@@ -937,58 +945,9 @@ function renderMessages() {
 }
 
 function renderStaff() {
-  const requests = isScheduleAdmin()
-    ? state.data.requests
-    : state.data.requests.filter((request) => request.employeeId === state.data.currentUserId);
-
   return `
     <div class="staff-layout">
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2 class="panel-title">Staff requests</h2>
-            <p class="panel-subtitle">Create availability notes or leave requests</p>
-          </div>
-        </div>
-        <div class="panel-body">
-          <form class="form-stack" id="requestForm">
-            <label>
-              Type
-              <select name="type">
-                <option value="Leave">Leave</option>
-                <option value="Availability">Availability</option>
-                <option value="Shift swap">Shift swap</option>
-              </select>
-            </label>
-            <label>
-              Start date
-              <input name="startDate" type="date" required />
-            </label>
-            <label>
-              End date
-              <input name="endDate" type="date" required />
-            </label>
-            <label>
-              Start time
-              <input name="startTime" type="time" />
-            </label>
-            <label>
-              End time
-              <input name="endTime" type="time" />
-            </label>
-            <label>
-              Detail
-              <textarea name="detail" rows="4" required placeholder="Add the request details"></textarea>
-            </label>
-            <button class="primary-button" type="submit">Submit request</button>
-          </form>
-          <div class="section-gap request-list">
-            ${requests.length ? requests.map((request) => renderRequestItem(request, isScheduleAdmin())).join("") : `<div class="empty-state">No staff requests yet.</div>`}
-          </div>
-        </div>
-      </section>
-
-      <section class="panel">
+      <section class="panel wide-panel">
         <div class="panel-head">
           <div>
             <h2 class="panel-title">Team directory</h2>
@@ -1001,6 +960,74 @@ function renderStaff() {
         </div>
       </section>
     </div>
+  `;
+}
+
+function renderRequests() {
+  const requests = visibleRequests();
+
+  return `
+    <div class="requests-layout">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">New request</h2>
+            <p class="panel-subtitle">Leave, availability, and shift swap details</p>
+          </div>
+        </div>
+        <div class="panel-body">
+          ${renderRequestForm()}
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title title-with-badge">Requests ${pendingRequestCount() ? `<span class="notification-badge">${pendingRequestCount()}</span>` : ""}</h2>
+            <p class="panel-subtitle">${isScheduleAdmin() ? "All staff requests" : "Your requests"}</p>
+          </div>
+        </div>
+        <div class="panel-body request-list">
+          ${requests.length ? requests.map((request) => renderRequestItem(request, isScheduleAdmin())).join("") : `<div class="empty-state">No requests yet.</div>`}
+        </div>
+      </section>
+    </div>
+  `;
+}
+
+function renderRequestForm() {
+  return `
+    <form class="form-stack" id="requestForm">
+      <label>
+        Type
+        <select name="type">
+          <option value="Leave">Leave</option>
+          <option value="Availability">Availability</option>
+          <option value="Shift swap">Shift swap</option>
+        </select>
+      </label>
+      <label>
+        Start date
+        <input name="startDate" type="date" required />
+      </label>
+      <label>
+        End date
+        <input name="endDate" type="date" required />
+      </label>
+      <label>
+        Start time
+        <input name="startTime" type="time" />
+      </label>
+      <label>
+        End time
+        <input name="endTime" type="time" />
+      </label>
+      <label>
+        Detail
+        <textarea name="detail" rows="4" required placeholder="Add the request details"></textarea>
+      </label>
+      <button class="primary-button" type="submit">Submit request</button>
+    </form>
   `;
 }
 
@@ -1309,6 +1336,7 @@ function renderMessageMedia(media) {
 function renderRequestItem(request, editable = false) {
   const employee = findEmployee(request.employeeId);
   const timing = getRequestTiming(request);
+  const canDelete = isScheduleAdmin() || request.employeeId === state.data.currentUserId;
   return `
     <article class="request-item">
       <div class="request-main">
@@ -1331,6 +1359,13 @@ function renderRequestItem(request, editable = false) {
         <span><strong>Status</strong>${request.status}</span>
       </div>
       ${request.detail ? `<div class="request-meta">${escapeHtml(request.detail)}</div>` : ""}
+      ${
+        canDelete
+          ? `<div class="request-actions">
+              <button class="mini-button" data-delete-request-id="${request.id}" type="button">Delete request</button>
+            </div>`
+          : ""
+      }
     </article>
   `;
 }
@@ -1533,6 +1568,22 @@ function deleteMessage(messageId) {
   render();
 }
 
+function deleteRequest(requestId) {
+  const request = state.data.requests.find((item) => item.id === requestId);
+  if (!request) return;
+  if (!isScheduleAdmin() && request.employeeId !== state.data.currentUserId) {
+    syncSaveStatus("You can only delete your own requests", true);
+    return;
+  }
+
+  if (typeof confirm === "function" && !confirm("Delete this request?")) return;
+  state.data.requests = state.data.requests.filter((item) => item.id !== requestId);
+  state.data.deletedRequestIds = Array.from(new Set([...(state.data.deletedRequestIds || []), requestId]));
+  saveData();
+  syncSaveStatus("Request deleted");
+  render();
+}
+
 function renderChannelRow(channel) {
   return `
     <form class="config-row channel-row" data-channel-form="${channel.id}">
@@ -1605,10 +1656,14 @@ function metric(label, value, caption, link = "", badge = 0) {
 }
 
 function pendingRequestCount() {
-  const requests = isScheduleAdmin()
+  const requests = visibleRequests();
+  return requests.filter((request) => request.status === "Pending").length;
+}
+
+function visibleRequests() {
+  return isScheduleAdmin()
     ? state.data.requests
     : state.data.requests.filter((request) => request.employeeId === state.data.currentUserId);
-  return requests.filter((request) => request.status === "Pending").length;
 }
 
 function statusPill(status) {
@@ -2806,10 +2861,11 @@ function normalizeData(data) {
   merged.channels = [teamChannel];
   merged.shifts = Array.isArray(data.shifts) ? data.shifts : defaults.shifts;
   merged.deletedMessageIds = Array.isArray(data.deletedMessageIds) ? data.deletedMessageIds : [];
+  merged.deletedRequestIds = Array.isArray(data.deletedRequestIds) ? data.deletedRequestIds : [];
   merged.messages = (Array.isArray(data.messages) ? data.messages : defaults.messages)
     .filter((message) => !merged.deletedMessageIds.includes(message.id))
     .map((message) => ({ ...message, channel: teamChannel.id, media: message.media || null }));
-  merged.requests = Array.isArray(data.requests) ? data.requests : defaults.requests;
+  merged.requests = (Array.isArray(data.requests) ? data.requests : defaults.requests).filter((request) => !merged.deletedRequestIds.includes(request.id));
   merged.areas = Array.isArray(data.areas) && data.areas.length ? data.areas : inferAreas(merged, defaults.areas);
   merged.businessName = !data.businessName || data.businessName === "ShiftLink" || data.businessName === "Marshal" ? defaults.businessName : data.businessName;
   merged.businessSubtitle =
@@ -2859,6 +2915,7 @@ function createSeedData() {
     shifts: [],
     messages: [],
     deletedMessageIds: [],
+    deletedRequestIds: [],
     requests: [],
   };
 }

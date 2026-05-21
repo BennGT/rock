@@ -61,25 +61,29 @@ export default async function handler(request) {
 
 function mergeAdminData(currentData, incomingData) {
   const deletedMessageIds = mergeDeletedIds(currentData.deletedMessageIds, incomingData.deletedMessageIds);
+  const deletedRequestIds = mergeDeletedIds(currentData.deletedRequestIds, incomingData.deletedRequestIds);
   return {
     ...incomingData,
     deletedMessageIds,
+    deletedRequestIds,
     messages: mergeById(currentData.messages, incomingData.messages).filter((message) => !deletedMessageIds.includes(message.id)),
-    requests: mergeById(currentData.requests, incomingData.requests),
+    requests: mergeById(currentData.requests, incomingData.requests).filter((request) => !deletedRequestIds.includes(request.id)),
   };
 }
 
 function mergeManagerData(currentData, incomingData, user) {
   const ownData = mergeEmployeeData(currentData, incomingData, user);
   const deletedMessageIds = mergeDeletedIds(currentData.deletedMessageIds, incomingData.deletedMessageIds);
+  const deletedRequestIds = mergeDeletedIds(currentData.deletedRequestIds, incomingData.deletedRequestIds);
 
   return {
     ...currentData,
     deletedMessageIds,
+    deletedRequestIds,
     employees: ownData.employees || currentData.employees,
     shifts: mergeById(currentData.shifts, incomingData.shifts),
     messages: mergeById(currentData.messages, incomingData.messages).filter((message) => !deletedMessageIds.includes(message.id)),
-    requests: mergeById(currentData.requests, incomingData.requests),
+    requests: mergeById(currentData.requests, incomingData.requests).filter((request) => !deletedRequestIds.includes(request.id)),
     savedAt: incomingData.savedAt || currentData.savedAt,
   };
 }
@@ -97,9 +101,10 @@ function mergeEmployeeData(currentData, incomingData, user) {
 
   const currentRequests = Array.isArray(currentData.requests) ? currentData.requests : [];
   const incomingRequests = Array.isArray(incomingData.requests) ? incomingData.requests : [];
-  const otherRequests = currentRequests.filter((request) => request.employeeId !== employeeId);
+  const deletedRequestIds = Array.isArray(currentData.deletedRequestIds) ? currentData.deletedRequestIds : [];
+  const otherRequests = currentRequests.filter((request) => request.employeeId !== employeeId && !deletedRequestIds.includes(request.id));
   const ownRequests = incomingRequests
-    .filter((request) => request.employeeId === employeeId && request.id)
+    .filter((request) => request.employeeId === employeeId && request.id && !deletedRequestIds.includes(request.id))
     .map((request) => {
       const existing = currentRequests.find((item) => item.id === request.id);
       return {
@@ -133,6 +138,7 @@ function mergeEmployeeData(currentData, incomingData, user) {
   return {
     ...currentData,
     deletedMessageIds,
+    deletedRequestIds,
     employees,
     messages: [...currentMessages, ...newOwnMessages].filter((message) => !deletedMessageIds.includes(message.id)),
     requests: [...ownRequests, ...otherRequests],
