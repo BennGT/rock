@@ -1177,6 +1177,16 @@ textarea {
   border-top: 1px solid var(--line);
 }
 
+.message-media-preview {
+  grid-column: 1 / -1;
+  display: grid;
+  justify-items: end;
+}
+
+.preview-message {
+  width: min(420px, 100%);
+}
+
 .media-picker {
   min-height: 40px;
   display: inline-flex;

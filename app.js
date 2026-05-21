@@ -488,7 +488,7 @@ function bindViewEvents() {
 
   appView.querySelectorAll("[data-request-status]").forEach((select) => {
     select.addEventListener("change", () => {
-      if (!isScheduleAdmin()) {
+      if (!isOwnerAdmin()) {
         syncSaveStatus("Only admins can update requests", true);
         return;
       }
@@ -529,6 +529,7 @@ function bindViewEvents() {
 
   const messageForm = appView.querySelector("#messageForm");
   if (messageForm) {
+    messageForm.elements.media?.addEventListener("change", () => previewMessageMedia(messageForm));
     messageForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       if (!state.data.currentUserId) {
@@ -562,6 +563,7 @@ function bindViewEvents() {
       state.seenMessageIds.add(message.id);
       input.value = "";
       if (messageForm.elements.media) messageForm.elements.media.value = "";
+      messageForm.querySelector("#messageMediaPreview")?.replaceChildren();
       saveData();
       sendPushAlert("New Sherif message", `${getCurrentUser().name}: ${text || "sent a photo"}`, {
         excludeUserId: state.authUser?.id,
@@ -793,7 +795,7 @@ function renderDashboard() {
             </div>
           </div>
           <div class="panel-body message-list">
-            ${state.data.messages.length ? state.data.messages.slice(-4).reverse().map(renderCompactMessage).join("") : `<div class="empty-state">No messages yet.</div>`}
+            ${visibleMessages().length ? visibleMessages().slice(-4).reverse().map(renderCompactMessage).join("") : `<div class="empty-state">No messages yet.</div>`}
           </div>
         </section>
 
@@ -920,7 +922,7 @@ function renderSchedule() {
 
 function renderMessages() {
   const channel = teamChannel;
-  const messages = state.data.messages.filter((message) => message.channel === channel.id);
+  const messages = visibleMessages().filter((message) => message.channel === channel.id);
 
   return `
     <section class="messages-layout">
@@ -939,6 +941,7 @@ function renderMessages() {
             <input name="media" type="file" accept="image/*" ${state.data.currentUserId ? "" : "disabled"} />
           </label>
           <button class="primary-button" type="submit" ${state.data.currentUserId ? "" : "disabled"}>Send</button>
+          <div class="message-media-preview" id="messageMediaPreview" aria-live="polite"></div>
         </form>
       </div>
     </section>
@@ -989,7 +992,7 @@ function renderRequests() {
           </div>
         </div>
         <div class="panel-body request-list">
-          ${requests.length ? requests.map((request) => renderRequestItem(request, isScheduleAdmin())).join("") : `<div class="empty-state">No requests yet.</div>`}
+          ${requests.length ? requests.map((request) => renderRequestItem(request, isOwnerAdmin())).join("") : `<div class="empty-state">No requests yet.</div>`}
         </div>
       </section>
     </div>
@@ -1304,7 +1307,7 @@ function renderCompactMessage(message) {
 
 function renderMessage(message) {
   const employee = findEmployee(message.employeeId);
-  const canDelete = isScheduleAdmin();
+  const canDelete = isOwnerAdmin() || message.employeeId === state.data.currentUserId;
   return `
     <article class="message-item ${message.employeeId === state.data.currentUserId ? "own" : ""}">
       <div class="message-head">
@@ -1337,7 +1340,7 @@ function renderMessageMedia(media) {
 function renderRequestItem(request, editable = false) {
   const employee = findEmployee(request.employeeId);
   const timing = getRequestTiming(request);
-  const canDelete = isScheduleAdmin() || request.employeeId === state.data.currentUserId;
+  const canDelete = isOwnerAdmin();
   return `
     <article class="request-item">
       <div class="request-main">
@@ -1556,24 +1559,34 @@ function savePersonalDetails(event) {
 function deleteMessage(messageId) {
   const message = state.data.messages.find((item) => item.id === messageId);
   if (!message) return;
-  if (!isScheduleAdmin()) {
-    syncSaveStatus("Only admins can delete messages", true);
+
+  if (isOwnerAdmin()) {
+    if (typeof confirm === "function" && !confirm("Delete this message for everyone?")) return;
+    state.data.messages = state.data.messages.filter((item) => item.id !== messageId);
+    state.data.deletedMessageIds = Array.from(new Set([...(state.data.deletedMessageIds || []), messageId]));
+    saveData();
+    syncSaveStatus("Message deleted");
+    render();
     return;
   }
 
-  if (typeof confirm === "function" && !confirm("Delete this message?")) return;
-  state.data.messages = state.data.messages.filter((item) => item.id !== messageId);
-  state.data.deletedMessageIds = Array.from(new Set([...(state.data.deletedMessageIds || []), messageId]));
+  if (message.employeeId !== state.data.currentUserId) {
+    syncSaveStatus("You can only remove your own messages", true);
+    return;
+  }
+
+  if (typeof confirm === "function" && !confirm("Hide this message from your view? Admins will still be able to see it.")) return;
+  message.hiddenForUserIds = Array.from(new Set([...(message.hiddenForUserIds || []), state.authUser?.id].filter(Boolean)));
   saveData();
-  syncSaveStatus("Message deleted");
+  syncSaveStatus("Message hidden from your view");
   render();
 }
 
 function deleteRequest(requestId) {
   const request = state.data.requests.find((item) => item.id === requestId);
   if (!request) return;
-  if (!isScheduleAdmin() && request.employeeId !== state.data.currentUserId) {
-    syncSaveStatus("You can only delete your own requests", true);
+  if (!isOwnerAdmin()) {
+    syncSaveStatus("Only admins can delete requests", true);
     return;
   }
 
@@ -1583,6 +1596,35 @@ function deleteRequest(requestId) {
   saveData();
   syncSaveStatus("Request deleted");
   render();
+}
+
+async function previewMessageMedia(form) {
+  const preview = form.querySelector("#messageMediaPreview");
+  if (!preview) return;
+  preview.replaceChildren();
+
+  const file = form.elements.media?.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith("image/")) {
+    preview.innerHTML = `<div class="empty-state">Photos and GIFs only for now.</div>`;
+    return;
+  }
+  if (file.size > 2 * 1024 * 1024) {
+    preview.innerHTML = `<div class="empty-state">Image must be under 2 MB.</div>`;
+    return;
+  }
+
+  try {
+    const media = await readFileAsDataUrl(file);
+    preview.innerHTML = `
+      <article class="message-item own preview-message">
+        ${form.elements.body.value.trim() ? `<p>${escapeHtml(form.elements.body.value.trim())}</p>` : ""}
+        ${renderMessageMedia(media)}
+      </article>
+    `;
+  } catch (error) {
+    preview.innerHTML = `<div class="empty-state">Preview could not be loaded.</div>`;
+  }
 }
 
 function renderChannelRow(channel) {
@@ -1665,6 +1707,12 @@ function visibleRequests() {
   return isScheduleAdmin()
     ? state.data.requests
     : state.data.requests.filter((request) => request.employeeId === state.data.currentUserId);
+}
+
+function visibleMessages() {
+  if (isOwnerAdmin()) return state.data.messages;
+  const userId = state.authUser?.id;
+  return state.data.messages.filter((message) => !userId || !Array.isArray(message.hiddenForUserIds) || !message.hiddenForUserIds.includes(userId));
 }
 
 function statusPill(status) {
@@ -2868,7 +2916,7 @@ function normalizeData(data) {
   merged.deletedRequestIds = Array.isArray(data.deletedRequestIds) ? data.deletedRequestIds : [];
   merged.messages = (Array.isArray(data.messages) ? data.messages : defaults.messages)
     .filter((message) => !merged.deletedMessageIds.includes(message.id))
-    .map((message) => ({ ...message, channel: teamChannel.id, media: message.media || null }));
+    .map((message) => ({ ...message, channel: teamChannel.id, media: message.media || null, hiddenForUserIds: Array.isArray(message.hiddenForUserIds) ? message.hiddenForUserIds : [] }));
   merged.requests = (Array.isArray(data.requests) ? data.requests : defaults.requests).filter((request) => !merged.deletedRequestIds.includes(request.id));
   merged.areas = Array.isArray(data.areas) && data.areas.length ? data.areas : inferAreas(merged, defaults.areas);
   merged.businessName = !data.businessName || data.businessName === "ShiftLink" || data.businessName === "Marshal" ? defaults.businessName : data.businessName;
