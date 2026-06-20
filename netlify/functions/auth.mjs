@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { getStore } from "@netlify/blobs";
+import webpush from "web-push";
 
 const headers = {
   "Content-Type": "application/json",
@@ -234,6 +235,7 @@ async function createRecoveryRequest(store, body) {
 
   requests.unshift(request);
   await setRecoveryRequests(store, requests.slice(0, 50));
+  await sendAdminRecoveryPush(users, request).catch((error) => console.error(error));
   return json(200, { ok: true });
 }
 
@@ -461,6 +463,57 @@ async function getRecoveryRequests(store) {
 
 async function setRecoveryRequests(store, requests) {
   await store.setJSON("recovery-requests", requests);
+}
+
+async function sendAdminRecoveryPush(users, request) {
+  const publicKey = process.env.MARSHAL_VAPID_PUBLIC_KEY || "";
+  const privateKey = process.env.MARSHAL_VAPID_PRIVATE_KEY || "";
+  const subject = process.env.MARSHAL_VAPID_SUBJECT || "mailto:admin@example.com";
+  if (!publicKey || !privateKey) return;
+
+  const adminIds = new Set(users.filter(isOwnerAdmin).map((user) => user.id));
+  if (!adminIds.size) return;
+
+  const pushStore = getMarshalStore("marshal-push");
+  const subscriptions = await getSubscriptions(pushStore);
+  const adminSubscriptions = subscriptions.filter((item) => adminIds.has(item.userId));
+  if (!adminSubscriptions.length) return;
+
+  webpush.setVapidDetails(subject, publicKey, privateKey);
+  const message = JSON.stringify({
+    title: "Sherif sign-in help request",
+    body: `${request.name} needs help signing in`,
+    url: "/?page=setup",
+  });
+
+  const validSubscriptions = [];
+  await Promise.all(
+    subscriptions.map(async (item) => {
+      if (!adminIds.has(item.userId)) {
+        validSubscriptions.push(item);
+        return;
+      }
+
+      try {
+        await webpush.sendNotification(item.subscription, message);
+        validSubscriptions.push(item);
+      } catch (error) {
+        if (![404, 410].includes(error.statusCode)) validSubscriptions.push(item);
+      }
+    }),
+  );
+
+  if (validSubscriptions.length !== subscriptions.length) {
+    await setSubscriptions(pushStore, validSubscriptions);
+  }
+}
+
+async function getSubscriptions(store) {
+  return (await store.get("subscriptions", { type: "json" })) || [];
+}
+
+async function setSubscriptions(store, subscriptions) {
+  await store.setJSON("subscriptions", subscriptions);
 }
 
 function makeUser(body, role) {

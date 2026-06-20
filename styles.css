@@ -332,6 +332,63 @@ button {
   background: currentColor;
 }
 
+.notification-bell {
+  position: relative;
+  width: 44px;
+  min-height: 40px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.bell-shape {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  display: block;
+  border: 2px solid currentColor;
+  border-bottom: 0;
+  border-radius: 12px 12px 5px 5px;
+}
+
+.bell-shape::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: -5px;
+  width: 6px;
+  height: 5px;
+  border-radius: 999px 999px 0 0;
+  border: 2px solid currentColor;
+  border-bottom: 0;
+  transform: translateX(-50%);
+}
+
+.bell-shape::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  transform: translateX(-50%);
+}
+
+.notification-bell .notification-badge {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  min-width: 20px;
+  height: 20px;
+  font-size: 11px;
+}
+
 .eyebrow {
   margin: 0 0 6px;
   color: var(--teal);

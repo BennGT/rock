@@ -76,6 +76,8 @@ const menuButton = document.querySelector("#menuButton");
 const appMenu = document.querySelector("#appMenu");
 const saveStatus = document.querySelector("#saveStatus");
 const accountStatus = document.querySelector("#accountStatus");
+const recoveryBellButton = document.querySelector("#recoveryBellButton");
+const recoveryBellBadge = document.querySelector("#recoveryBellBadge");
 const signOutButton = document.querySelector("#signOutButton");
 const installAppButton = document.querySelector("#installAppButton");
 const notificationButton = document.querySelector("#notificationButton");
@@ -108,6 +110,7 @@ function init() {
   state.view = readViewFromUrl();
   todayLabel.textContent = formatLongDate(new Date());
   syncShell();
+  syncRecoveryBell();
   syncSaveStatus();
   syncInstallButton();
   syncNotificationButton();
@@ -173,6 +176,7 @@ function bindChrome() {
   signOutButton.addEventListener("click", signOut);
   installAppButton.addEventListener("click", installApp);
   notificationButton.addEventListener("click", requestNotifications);
+  recoveryBellButton.addEventListener("click", () => navigateToView("setup"));
 
   if (typeof window !== "undefined") {
     window.addEventListener("popstate", () => {
@@ -339,6 +343,7 @@ function bindChrome() {
 
 function render() {
   if (!views[state.view]) state.view = defaultView;
+  syncRecoveryBell();
   document.querySelectorAll(".nav-tab").forEach((tab) => {
     tab.classList.toggle("active", tab.dataset.view === state.view);
     tab.querySelector(".nav-badge")?.remove();
@@ -2234,6 +2239,13 @@ function syncShell() {
   document.title = state.data.businessName;
 }
 
+function syncRecoveryBell() {
+  const count = isOwnerAdmin() ? state.authRecoveryRequests.length : 0;
+  recoveryBellButton.classList.toggle("hidden", !count);
+  recoveryBellBadge.textContent = String(count);
+  recoveryBellButton.setAttribute("aria-label", count ? `${count} sign-in help request${count === 1 ? "" : "s"}` : "No sign-in help requests");
+}
+
 function syncSaveStatus(message = null, isError = false) {
   if (!saveStatus) return;
   saveStatus.classList.toggle("error", isError);
@@ -2332,6 +2344,7 @@ async function initAuth() {
     state.authUsers = payload.users || [];
     state.authInvites = payload.invites || [];
     state.authRecoveryRequests = payload.recoveryRequests || [];
+    syncRecoveryBell();
     if (!state.authUser && state.authToken) {
       state.authToken = null;
       localStorage.removeItem(authTokenKey);
@@ -2359,6 +2372,7 @@ function clearLocalAuthSession() {
   state.authUsers = [];
   state.authInvites = [];
   state.authRecoveryRequests = [];
+  syncRecoveryBell();
   state.cloudStatus = "local";
   stopCloudRefresh();
   localStorage.removeItem(authTokenKey);
@@ -2402,6 +2416,7 @@ async function submitAuth(event) {
     state.authUsers = payload.users || [];
     state.authInvites = payload.invites || [];
     state.authRecoveryRequests = payload.recoveryRequests || [];
+    syncRecoveryBell();
     state.setupRequired = false;
     if (acceptedInvite) {
       navigateToView("mydetails", { replace: true });
@@ -2465,6 +2480,7 @@ async function signOut() {
     state.authUsers = [];
     state.authInvites = [];
     state.authRecoveryRequests = [];
+    syncRecoveryBell();
   stopCloudRefresh();
   localStorage.removeItem(authTokenKey);
   state.cloudStatus = "local";
@@ -2545,6 +2561,7 @@ async function deleteRecoveryRequest(requestId) {
   try {
     const payload = await authRequest({ action: "delete-recovery-request", requestId }, "POST");
     state.authRecoveryRequests = payload.recoveryRequests || [];
+    syncRecoveryBell();
     syncSaveStatus("Sign-in help request cleared");
     render();
   } catch (error) {
@@ -2590,6 +2607,7 @@ async function resetAccountPassword(event) {
 
     state.authUsers = payload.users || [];
     state.authRecoveryRequests = payload.recoveryRequests || state.authRecoveryRequests;
+    syncRecoveryBell();
     form.reset();
     syncSaveStatus("Password reset");
     render();
@@ -3204,6 +3222,7 @@ async function handleAuthExpired() {
   state.authUsers = [];
   state.authInvites = [];
   state.authRecoveryRequests = [];
+  syncRecoveryBell();
   localStorage.removeItem(authTokenKey);
   state.cloudStatus = "local";
   syncSaveStatus("Session expired", true);
