@@ -51,8 +51,10 @@ body {
 
 .auth-card {
   width: min(430px, 100%);
+  max-height: calc(100vh - 40px);
   display: grid;
   gap: 14px;
+  overflow: auto;
   padding: 24px;
   border-radius: 8px;
   background: var(--surface);
@@ -77,9 +79,24 @@ body {
 }
 
 .auth-copy {
-  margin-bottom: 0;
+  margin: 0;
   color: var(--muted);
   line-height: 1.45;
+}
+
+#forgotSignInForm {
+  gap: 10px;
+}
+
+#forgotSignInForm textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.auth-form-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
 }
 
 .auth-error {
