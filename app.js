@@ -1380,9 +1380,9 @@ function renderPhoneAlertsPanel() {
 
 function renderShiftItem(shift) {
   const employee = findEmployee(shift.employeeId);
-  const employeeColor = employee.color || colorForEmployee(employee.id);
+  const colors = employeeShiftColors(employee);
   return `
-    <button class="shift-item" data-shift-id="${shift.id}" type="button" style="border-left-color: ${employeeColor}">
+    <button class="shift-item" data-shift-id="${shift.id}" type="button" style="--shift-color-1: ${colors[0]}; --shift-color-2: ${colors[1]}; --shift-color-3: ${colors[2]}; --employee-soft: ${softColor(colors[0])}">
       <div class="shift-main">
         <div class="person-line">
           ${renderAvatar(employee)}
@@ -1404,9 +1404,9 @@ function renderShiftItem(shift) {
 function renderScheduleShift(shift) {
   const employee = findEmployee(shift.employeeId);
   const className = shift.status.toLowerCase();
-  const employeeColor = employee.color || colorForEmployee(employee.id);
+  const colors = employeeShiftColors(employee);
   return `
-    <article class="schedule-shift ${className}" style="--employee-color: ${employeeColor}; --employee-soft: ${softColor(employeeColor)}; border-left-color: ${employeeColor}">
+    <article class="schedule-shift ${className}" style="--employee-color: ${colors[0]}; --employee-soft: ${softColor(colors[0])}; --shift-color-1: ${colors[0]}; --shift-color-2: ${colors[1]}; --shift-color-3: ${colors[2]}">
       <div class="schedule-shift-head">
         <strong>${shift.start} to ${shift.end}</strong>
         ${shift.published ? statusPill(shift.status) : statusPill("Unpublished")}
@@ -3377,6 +3377,15 @@ function renderColorSwatches(employee) {
   const colors = [employee.color, employee.color2, employee.color3].map(normalizeColor).filter(Boolean);
   if (!colors.length) return "";
   return `<span class="profile-swatches">${colors.map((color) => `<i style="background: ${color}"></i>`).join("")}</span>`;
+}
+
+function employeeShiftColors(employee) {
+  const fallback = employee.color || colorForEmployee(employee.id);
+  return [
+    normalizeColor(employee.color) || fallback,
+    normalizeColor(employee.color2) || "#087aa3",
+    normalizeColor(employee.color3) || "#d84a2a",
+  ];
 }
 
 function scheduleDisplayName(employee) {

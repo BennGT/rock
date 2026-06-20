@@ -626,12 +626,27 @@ h3 {
 }
 
 .shift-item {
+  position: relative;
   display: grid;
   gap: 8px;
   width: 100%;
-  border-left: 4px solid var(--accent);
+  padding-left: 16px;
   color: inherit;
   text-align: left;
+  overflow: hidden;
+}
+
+.shift-item::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  background: linear-gradient(
+    to bottom,
+    var(--shift-color-1, var(--accent)) 0 33.33%,
+    var(--shift-color-2, var(--teal)) 33.33% 66.66%,
+    var(--shift-color-3, var(--amber)) 66.66% 100%
+  );
 }
 
 .shift-main,
@@ -927,14 +942,28 @@ h3 {
 }
 
 .schedule-shift {
+  position: relative;
   display: grid;
   gap: 8px;
-  padding: 10px;
+  padding: 10px 10px 10px 14px;
   border: 1px solid var(--line);
-  border-left: 4px solid var(--accent);
   border-radius: 8px;
   background: #ffffff;
   text-align: left;
+  overflow: hidden;
+}
+
+.schedule-shift::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 6px;
+  background: linear-gradient(
+    to bottom,
+    var(--shift-color-1, var(--accent)) 0 33.33%,
+    var(--shift-color-2, var(--teal)) 33.33% 66.66%,
+    var(--shift-color-3, var(--amber)) 66.66% 100%
+  );
 }
 
 .schedule-shift:hover {
@@ -988,14 +1017,6 @@ h3 {
 .schedule-shift span {
   color: var(--muted);
   font-size: 12px;
-}
-
-.schedule-shift.open {
-  border-left-color: var(--rose);
-}
-
-.schedule-shift.draft {
-  border-left-color: var(--amber);
 }
 
 .empty-state {
