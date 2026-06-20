@@ -463,7 +463,10 @@ h3 {
 }
 
 .page-brand-card {
-  display: none;
+  display: grid;
+  place-items: center;
+  min-height: 92px;
+  padding: 14px;
   margin-bottom: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -473,7 +476,7 @@ h3 {
 
 .page-brand-card img {
   display: block;
-  width: min(230px, 68%);
+  width: min(260px, 72%);
   height: auto;
   margin: 0 auto;
 }
