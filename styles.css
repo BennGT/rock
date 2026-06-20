@@ -780,9 +780,23 @@ h3 {
 }
 
 .schedule-control-stack {
+  width: min(520px, 100%);
   display: grid;
   gap: 10px;
   align-content: start;
+}
+
+.schedule-control-stack .segmented {
+  width: max-content;
+  max-width: 100%;
+  display: grid;
+  grid-template-columns: 88px minmax(150px, auto) 88px;
+}
+
+.schedule-control-stack .segmented button {
+  min-width: 0;
+  padding: 0 10px;
+  white-space: nowrap;
 }
 
 .schedule-actions {
@@ -1560,6 +1574,20 @@ textarea {
 
   .schedule-toolbar {
     grid-template-columns: 1fr;
+  }
+
+  .schedule-control-stack,
+  .schedule-control-stack .segmented {
+    width: 100%;
+  }
+
+  .schedule-control-stack .segmented {
+    grid-template-columns: 76px minmax(0, 1fr) 76px;
+  }
+
+  .schedule-control-stack .segmented button {
+    padding: 0 8px;
+    font-size: 12px;
   }
 
   .schedule-actions {
