@@ -89,6 +89,30 @@ body {
   font-weight: 800;
 }
 
+.auth-error:not(.error) {
+  color: var(--teal);
+}
+
+.password-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.password-toggle {
+  min-height: 42px;
+}
+
+.link-button {
+  min-height: 34px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--teal);
+  font-weight: 900;
+  text-align: left;
+}
+
 .invite-profile {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1129,6 +1153,10 @@ h3 {
   gap: 8px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.reset-password-form .password-field {
+  min-width: min(280px, 100%);
 }
 
 .compact-select {

@@ -33,6 +33,7 @@ const state = {
   authUser: null,
   authUsers: [],
   authInvites: [],
+  authRecoveryRequests: [],
   inviteDraft: {
     name: "",
     email: "",
@@ -86,6 +87,11 @@ const authIntro = document.querySelector("#authIntro");
 const authNameField = document.querySelector("#authNameField");
 const authError = document.querySelector("#authError");
 const authSubmitButton = document.querySelector("#authSubmitButton");
+const authPasswordToggle = document.querySelector("#authPasswordToggle");
+const forgotSignInButton = document.querySelector("#forgotSignInButton");
+const forgotSignInForm = document.querySelector("#forgotSignInForm");
+const forgotSignInStatus = document.querySelector("#forgotSignInStatus");
+const backToSignInButton = document.querySelector("#backToSignInButton");
 const shiftModal = document.querySelector("#shiftModal");
 const shiftForm = document.querySelector("#shiftForm");
 const deleteShiftButton = document.querySelector("#deleteShiftButton");
@@ -160,6 +166,10 @@ function bindChrome() {
 
   backupFileInput.addEventListener("change", importBackup);
   authForm.addEventListener("submit", submitAuth);
+  authPasswordToggle.addEventListener("click", () => togglePasswordField(authForm.elements.password, authPasswordToggle));
+  forgotSignInButton.addEventListener("click", showForgotSignIn);
+  backToSignInButton.addEventListener("click", showSignInForm);
+  forgotSignInForm.addEventListener("submit", submitRecoveryRequest);
   signOutButton.addEventListener("click", signOut);
   installAppButton.addEventListener("click", installApp);
   notificationButton.addEventListener("click", requestNotifications);
@@ -510,8 +520,19 @@ function bindViewEvents() {
     button.addEventListener("click", () => deleteInvite(button.dataset.deleteInviteId));
   });
 
+  appView.querySelectorAll("[data-delete-recovery-id]").forEach((button) => {
+    button.addEventListener("click", () => deleteRecoveryRequest(button.dataset.deleteRecoveryId));
+  });
+
   appView.querySelectorAll("[data-reset-password-form]").forEach((form) => {
     form.addEventListener("submit", resetAccountPassword);
+  });
+
+  appView.querySelectorAll("[data-password-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = button.closest(".password-field")?.querySelector("input");
+      if (input) togglePasswordField(input, button);
+    });
   });
 
   const passwordForm = appView.querySelector("#passwordForm");
@@ -1235,6 +1256,9 @@ function renderSetup() {
                 <div class="section-gap config-list">
                   ${state.authInvites.length ? state.authInvites.filter((invite) => !invite.acceptedAt).map(renderInviteRow).join("") : `<div class="empty-state">No pending invitations.</div>`}
                 </div>
+                <div class="section-gap config-list">
+                  ${state.authRecoveryRequests.length ? state.authRecoveryRequests.map(renderRecoveryRequestRow).join("") : `<div class="empty-state">No sign-in help requests.</div>`}
+                </div>
                 <div class="config-list">
                   ${state.authUsers.length ? state.authUsers.map(renderAccountRow).join("") : `<div class="empty-state">No login accounts loaded.</div>`}
                 </div>
@@ -1828,7 +1852,10 @@ function renderAccountRow(user) {
         <span>${escapeHtml(user.email)} - ${roleLabel}</span>
       </div>
       <form class="row-actions reset-password-form" data-reset-password-form="${user.id}">
-        <input name="newPassword" type="password" placeholder="New password" aria-label="New password for ${escapeHtml(user.name)}" minlength="8" required />
+        <span class="password-field">
+          <input name="newPassword" type="password" placeholder="New password" aria-label="New password for ${escapeHtml(user.name)}" minlength="8" required />
+          <button class="ghost-button password-toggle" data-password-toggle type="button">Show</button>
+        </span>
         <button class="ghost-button" type="submit">Reset</button>
       </form>
       <div class="row-actions">
@@ -1856,6 +1883,24 @@ function renderInviteRow(invite) {
         <button class="ghost-button" data-email-invite-id="${invite.id}" type="button">Email</button>
         <button class="ghost-button" data-sms-invite-id="${invite.id}" type="button" ${invite.phone ? "" : "disabled"}>SMS</button>
         <button class="ghost-button" data-delete-invite-id="${invite.id}" type="button">Delete</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderRecoveryRequestRow(request) {
+  const matchedUser = request.matchedUserId ? state.authUsers.find((user) => user.id === request.matchedUserId) : null;
+  return `
+    <div class="config-row account-row recovery-row">
+      <div>
+        <strong>Sign-in help: ${escapeHtml(request.name || "Unknown")}</strong>
+        <span>${escapeHtml(request.email || "No email supplied")}${request.phone ? ` - ${escapeHtml(request.phone)}` : ""}</span>
+        <span>${escapeHtml(request.detail || "Forgot email or password")}</span>
+        <span>${matchedUser ? `Matched account: ${escapeHtml(matchedUser.email)}` : "No exact email match"}</span>
+      </div>
+      <div class="row-actions">
+        ${matchedUser ? `<button class="ghost-button" data-invite-account-id="${matchedUser.id}" type="button">Send login details</button>` : ""}
+        <button class="ghost-button" data-delete-recovery-id="${request.id}" type="button">Done</button>
       </div>
     </div>
   `;
@@ -2238,6 +2283,26 @@ function syncAuthScreen() {
   authSubmitButton.textContent = acceptingInvite || state.setupRequired ? "Create account" : "Sign in";
 }
 
+function togglePasswordField(input, button) {
+  const showing = input.type === "text";
+  input.type = showing ? "password" : "text";
+  button.textContent = showing ? "Show" : "Hide";
+}
+
+function showForgotSignIn() {
+  authForm.classList.add("hidden");
+  forgotSignInForm.classList.remove("hidden");
+  forgotSignInStatus.textContent = "";
+  forgotSignInForm.elements.name.focus();
+}
+
+function showSignInForm() {
+  forgotSignInForm.classList.add("hidden");
+  authForm.classList.remove("hidden");
+  authError.textContent = "";
+  authForm.elements.email.focus();
+}
+
 async function initAuth() {
   if (!canUseCloudSync()) {
     state.setupRequired = false;
@@ -2259,6 +2324,7 @@ async function initAuth() {
     state.setupRequired = Boolean(payload.setupRequired);
     state.authUsers = payload.users || [];
     state.authInvites = payload.invites || [];
+    state.authRecoveryRequests = payload.recoveryRequests || [];
     if (!state.authUser && state.authToken) {
       state.authToken = null;
       localStorage.removeItem(authTokenKey);
@@ -2285,6 +2351,7 @@ function clearLocalAuthSession() {
   state.authUser = null;
   state.authUsers = [];
   state.authInvites = [];
+  state.authRecoveryRequests = [];
   state.cloudStatus = "local";
   stopCloudRefresh();
   localStorage.removeItem(authTokenKey);
@@ -2327,6 +2394,7 @@ async function submitAuth(event) {
     state.authUser = payload.user;
     state.authUsers = payload.users || [];
     state.authInvites = payload.invites || [];
+    state.authRecoveryRequests = payload.recoveryRequests || [];
     state.setupRequired = false;
     if (acceptedInvite) {
       navigateToView("mydetails", { replace: true });
@@ -2349,6 +2417,33 @@ async function submitAuth(event) {
   }
 }
 
+async function submitRecoveryRequest(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const formData = new FormData(form);
+  forgotSignInStatus.classList.remove("error");
+  forgotSignInStatus.textContent = "";
+
+  try {
+    await authRequest(
+      {
+        action: "recovery-request",
+        name: formData.get("name"),
+        email: formData.get("email"),
+        phone: formData.get("phone"),
+        detail: formData.get("detail"),
+      },
+      "POST",
+    );
+
+    form.reset();
+    forgotSignInStatus.textContent = "Request sent. An admin can reset your password or confirm your email.";
+  } catch (error) {
+    forgotSignInStatus.classList.add("error");
+    forgotSignInStatus.textContent = error.message || "Could not send request.";
+  }
+}
+
 async function signOut() {
   try {
     if (state.authToken) {
@@ -2360,8 +2455,9 @@ async function signOut() {
 
   state.authToken = null;
   state.authUser = null;
-  state.authUsers = [];
-  state.authInvites = [];
+    state.authUsers = [];
+    state.authInvites = [];
+    state.authRecoveryRequests = [];
   stopCloudRefresh();
   localStorage.removeItem(authTokenKey);
   state.cloudStatus = "local";
@@ -2438,6 +2534,17 @@ async function deleteInvite(inviteId) {
   }
 }
 
+async function deleteRecoveryRequest(requestId) {
+  try {
+    const payload = await authRequest({ action: "delete-recovery-request", requestId }, "POST");
+    state.authRecoveryRequests = payload.recoveryRequests || [];
+    syncSaveStatus("Sign-in help request cleared");
+    render();
+  } catch (error) {
+    syncSaveStatus(error.message || "Could not clear request", true);
+  }
+}
+
 async function changeOwnPassword(event) {
   event.preventDefault();
   const formData = new FormData(event.currentTarget);
@@ -2475,6 +2582,7 @@ async function resetAccountPassword(event) {
     );
 
     state.authUsers = payload.users || [];
+    state.authRecoveryRequests = payload.recoveryRequests || state.authRecoveryRequests;
     form.reset();
     syncSaveStatus("Password reset");
     render();
@@ -3088,6 +3196,7 @@ async function handleAuthExpired() {
   state.authUser = null;
   state.authUsers = [];
   state.authInvites = [];
+  state.authRecoveryRequests = [];
   localStorage.removeItem(authTokenKey);
   state.cloudStatus = "local";
   syncSaveStatus("Session expired", true);
@@ -3101,6 +3210,7 @@ async function refreshAuthLists() {
     const payload = await authRequest(null, "GET");
     state.authUsers = payload.users || state.authUsers;
     state.authInvites = payload.invites || state.authInvites;
+    state.authRecoveryRequests = payload.recoveryRequests || state.authRecoveryRequests;
     if (state.view === "setup" && !isTypingInAppView()) render();
   } catch (error) {
     console.error(error);

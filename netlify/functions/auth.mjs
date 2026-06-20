@@ -25,6 +25,7 @@ export default async function handler(request) {
 
       const users = await getUsers(store);
       const invites = await getInvites(store);
+      const recoveryRequests = await getRecoveryRequests(store);
       const user = await getAuthenticatedUser(store, request.headers.get("authorization"));
 
       return json(200, {
@@ -32,6 +33,7 @@ export default async function handler(request) {
         setupRequired: users.length === 0,
         users: isOwnerAdmin(user) ? publicUsers(users) : [],
         invites: isOwnerAdmin(user) ? publicInvites(invites) : [],
+        recoveryRequests: isOwnerAdmin(user) ? publicRecoveryRequests(recoveryRequests) : [],
       });
     }
 
@@ -49,6 +51,10 @@ export default async function handler(request) {
 
     if (action === "login") {
       return login(store, body);
+    }
+
+    if (action === "recovery-request") {
+      return createRecoveryRequest(store, body);
     }
 
     if (action === "accept-invite") {
@@ -88,6 +94,10 @@ export default async function handler(request) {
 
     if (action === "delete-invite") {
       return deleteInvite(store, body);
+    }
+
+    if (action === "delete-recovery-request") {
+      return deleteRecoveryRequest(store, body);
     }
 
     if (action === "reset-password") {
@@ -197,6 +207,34 @@ async function createInvite(store, body, currentUser) {
   invites.unshift(invite);
   await setInvites(store, invites);
   return json(200, { invite: publicInvite(invite), invites: publicInvites(invites) });
+}
+
+async function createRecoveryRequest(store, body) {
+  const name = String(body.name || "").trim();
+  const email = normalizeEmail(body.email);
+  const phone = String(body.phone || "").trim();
+  const detail = String(body.detail || "").trim();
+
+  if (!name) return json(400, { error: "Name is required" });
+  if (!email && !phone) return json(400, { error: "Add an email or phone number" });
+  if (email && !email.includes("@")) return json(400, { error: "Valid email is required" });
+
+  const users = await getUsers(store);
+  const requests = await getRecoveryRequests(store);
+  const matchedUser = email ? users.find((user) => user.email === email) : null;
+  const request = {
+    id: crypto.randomUUID(),
+    name,
+    email,
+    phone,
+    detail: detail || "Forgot email or password",
+    matchedUserId: matchedUser?.id || null,
+    createdAt: new Date().toISOString(),
+  };
+
+  requests.unshift(request);
+  await setRecoveryRequests(store, requests.slice(0, 50));
+  return json(200, { ok: true });
 }
 
 async function getInvite(store, token) {
@@ -339,6 +377,16 @@ async function deleteInvite(store, body) {
   return json(200, { invites: publicInvites(remainingInvites) });
 }
 
+async function deleteRecoveryRequest(store, body) {
+  const requests = await getRecoveryRequests(store);
+  const requestId = body.requestId;
+  if (!requestId) return json(400, { error: "Missing request id" });
+
+  const remainingRequests = requests.filter((request) => request.id !== requestId);
+  await setRecoveryRequests(store, remainingRequests);
+  return json(200, { recoveryRequests: publicRecoveryRequests(remainingRequests) });
+}
+
 async function changePassword(store, body, currentUser) {
   const users = await getUsers(store);
   const user = users.find((item) => item.id === currentUser.id);
@@ -360,7 +408,8 @@ async function resetPassword(store, body) {
 
   user.password = hashPassword(assertPassword(body.newPassword));
   await setUsers(store, users);
-  return json(200, { users: publicUsers(users) });
+  const recoveryRequests = await getRecoveryRequests(store);
+  return json(200, { users: publicUsers(users), recoveryRequests: publicRecoveryRequests(recoveryRequests) });
 }
 
 async function createSession(store, userId) {
@@ -404,6 +453,14 @@ async function getInvites(store) {
 
 async function setInvites(store, invites) {
   await store.setJSON("invites", invites);
+}
+
+async function getRecoveryRequests(store) {
+  return (await store.get("recovery-requests", { type: "json" })) || [];
+}
+
+async function setRecoveryRequests(store, requests) {
+  await store.setJSON("recovery-requests", requests);
 }
 
 function makeUser(body, role) {
@@ -461,6 +518,18 @@ function publicUsers(users) {
 
 function publicInvites(invites) {
   return invites.filter((invite) => !invite.acceptedAt).map(publicInvite);
+}
+
+function publicRecoveryRequests(requests) {
+  return requests.map((request) => ({
+    id: request.id,
+    name: request.name,
+    email: request.email,
+    phone: request.phone || "",
+    detail: request.detail || "",
+    matchedUserId: request.matchedUserId || null,
+    createdAt: request.createdAt,
+  }));
 }
 
 function publicInvite(invite) {

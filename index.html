@@ -33,10 +33,36 @@
           </label>
           <label>
             Password
-            <input name="password" type="password" autocomplete="current-password" required minlength="8" />
+            <span class="password-field">
+              <input name="password" type="password" autocomplete="current-password" required minlength="8" />
+              <button class="ghost-button password-toggle" type="button" id="authPasswordToggle">Show</button>
+            </span>
           </label>
           <div class="auth-error" id="authError" role="alert"></div>
           <button class="primary-button" type="submit" id="authSubmitButton">Sign in</button>
+          <button class="link-button" type="button" id="forgotSignInButton">Forgot email or password?</button>
+        </form>
+        <form class="form-stack hidden" id="forgotSignInForm">
+          <p class="auth-copy">Send a sign-in help request to an admin. Your username is usually your email address.</p>
+          <label>
+            Name
+            <input name="name" type="text" autocomplete="name" required />
+          </label>
+          <label>
+            Email, if known
+            <input name="email" type="email" autocomplete="email" />
+          </label>
+          <label>
+            Phone
+            <input name="phone" type="tel" autocomplete="tel" />
+          </label>
+          <label>
+            Note
+            <textarea name="detail" rows="3" placeholder="I forgot my password, email, or both"></textarea>
+          </label>
+          <div class="auth-error" id="forgotSignInStatus" role="alert"></div>
+          <button class="primary-button" type="submit">Send request</button>
+          <button class="link-button" type="button" id="backToSignInButton">Back to sign in</button>
         </form>
       </div>
     </div>
