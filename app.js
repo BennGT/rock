@@ -282,6 +282,7 @@ function bindChrome() {
     employee.color3 = normalizeColor(employee.color3) || "#d84a2a";
     employee.id = state.editingEmployeeId || crypto.randomUUID();
     const existingIndex = state.data.employees.findIndex((item) => item.id === employee.id);
+    const existingEmployee = existingIndex >= 0 ? state.data.employees[existingIndex] : {};
     const avatarFile = employeeForm.elements.avatarFile?.files?.[0] || null;
     delete employee.avatarFile;
 
@@ -290,11 +291,17 @@ function bindChrome() {
       if (!avatar) return;
       employee.avatar = avatar;
     } else if (existingIndex >= 0) {
-      employee.avatar = state.data.employees[existingIndex].avatar || null;
+      employee.avatar = existingEmployee.avatar || null;
     }
 
+    employee.profileComplete = Boolean(employee.name && employee.initials);
+    employee.createdAt = existingEmployee.createdAt || employee.createdAt;
+
     if (existingIndex >= 0) {
-      state.data.employees[existingIndex] = employee;
+      state.data.employees[existingIndex] = {
+        ...existingEmployee,
+        ...employee,
+      };
     } else {
       state.data.employees.push(employee);
     }
@@ -1280,7 +1287,7 @@ function renderMyDetails() {
 
 function renderPersonalDetailsPanel() {
   const employee = getOwnEmployeeProfile();
-  const showBlankProfile = !employee.id || employee.profileComplete !== true;
+  const showBlankProfile = !employee.id;
   const profile = !showBlankProfile
     ? employee
     : {
