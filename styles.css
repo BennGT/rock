@@ -730,6 +730,16 @@ h3 {
   flex-wrap: wrap;
 }
 
+.schedule-actions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.schedule-actions button {
+  width: 100%;
+}
+
 .copy-banner {
   padding: 10px 12px;
   border: 1px solid #c7d8ff;
@@ -1445,6 +1455,10 @@ textarea {
   .toolbar {
     width: 100%;
     display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .schedule-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

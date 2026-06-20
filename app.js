@@ -18,6 +18,8 @@ const state = {
   editingShiftId: null,
   editingEmployeeId: null,
   copiedShift: null,
+  copiedWeek: null,
+  publishingWeek: false,
   deferredInstallPrompt: null,
   cloudStatus: "local",
   cloudSaveTimer: null,
@@ -350,7 +352,15 @@ function bindViewEvents() {
   });
 
   appView.querySelectorAll("[data-action='publish-week']").forEach((button) => {
-    button.addEventListener("click", publishCurrentWeek);
+    button.addEventListener("click", () => publishCurrentWeek(button));
+  });
+
+  appView.querySelectorAll("[data-action='copy-week']").forEach((button) => {
+    button.addEventListener("click", copyCurrentWeek);
+  });
+
+  appView.querySelectorAll("[data-action='paste-week']").forEach((button) => {
+    button.addEventListener("click", () => pasteCopiedWeek(button));
   });
 
   appView.querySelectorAll("[data-shift-id]").forEach((button) => {
@@ -847,6 +857,8 @@ function renderSchedule() {
   const copiedEmployee = state.copiedShift ? findEmployee(state.copiedShift.employeeId) : null;
   const unpublishedCount = weekShifts().filter((shift) => !shift.published).length;
   const selectedEmployee = state.scheduleEmployeeFilterId !== "all" ? findEmployee(state.scheduleEmployeeFilterId) : null;
+  const copiedWeekCount = state.copiedWeek?.shifts?.length || 0;
+  const publishDisabled = !unpublishedCount || state.publishingWeek;
 
   return `
     <div class="schedule-layout">
@@ -856,19 +868,22 @@ function renderSchedule() {
           <button data-week="0" class="active" type="button">${rangeLabel}</button>
           <button data-week="1" type="button">Next</button>
         </div>
-        ${
-          isScheduleAdmin()
-            ? `<div class="toolbar">
-                <button class="ghost-button" data-action="publish-week" type="button" ${unpublishedCount ? "" : "disabled"}>Publish week</button>
-                <button class="primary-button" data-action="new-shift" type="button">New shift</button>
-              </div>`
-            : ""
-        }
       </div>
+
+      ${
+        isScheduleAdmin()
+          ? `<div class="schedule-actions" aria-label="Schedule actions">
+              <button class="ghost-button" data-action="copy-week" type="button">Copy week</button>
+              <button class="ghost-button" data-action="paste-week" type="button" ${copiedWeekCount ? "" : "disabled"}>Paste week</button>
+              <button class="ghost-button" data-action="publish-week" type="button" ${publishDisabled ? "disabled" : ""}>${state.publishingWeek ? "Publishing..." : "Publish week"}</button>
+              <button class="primary-button" data-action="new-shift" type="button">New shift</button>
+            </div>`
+          : ""
+      }
 
       <div class="filter-strip" aria-label="Schedule staff filter">
         <button class="mini-button ${state.scheduleEmployeeFilterId === "all" ? "active" : ""}" data-schedule-filter="all" type="button">All staff</button>
-        ${state.data.employees
+        ${sortedEmployees()
           .map(
             (employee) =>
               `<button class="mini-button ${state.scheduleEmployeeFilterId === employee.id ? "active" : ""}" data-schedule-filter="${employee.id}" type="button">${employee.name}</button>`,
@@ -881,6 +896,13 @@ function renderSchedule() {
         state.copiedShift && isScheduleAdmin()
           ? `<div class="copy-banner">
               Copied ${copiedEmployee.name}, ${state.copiedShift.start} to ${state.copiedShift.end}. Choose Paste on a day.
+            </div>`
+          : ""
+      }
+      ${
+        state.copiedWeek && isScheduleAdmin()
+          ? `<div class="copy-banner">
+              Copied ${copiedWeekCount} shift${copiedWeekCount === 1 ? "" : "s"} from ${state.copiedWeek.rangeLabel}. Go to another week and choose Paste week.
             </div>`
           : ""
       }
@@ -1747,7 +1769,7 @@ function openShiftModal(shiftId = null) {
       };
 
   document.querySelector("#shiftModalTitle").textContent = shiftId ? "Edit shift" : "New shift";
-  shiftForm.elements.employeeId.innerHTML = state.data.employees
+  shiftForm.elements.employeeId.innerHTML = sortedEmployees()
     .map((employee) => `<option value="${employee.id}">${employee.name}</option>`)
     .join("");
   shiftForm.elements.area.innerHTML = state.data.areas
@@ -1823,14 +1845,97 @@ function pasteShift(date) {
   render();
 }
 
-function publishCurrentWeek() {
+function copyCurrentWeek() {
+  if (!isScheduleAdmin()) {
+    syncSaveStatus("Only admins can copy schedules", true);
+    return;
+  }
+
+  const shifts = weekShifts();
+  if (!shifts.length) {
+    syncSaveStatus("No shifts to copy this week", true);
+    return;
+  }
+
+  state.copiedShift = null;
+  state.copiedWeek = {
+    start: toDateKey(state.weekStart),
+    rangeLabel: `${formatDateShort(state.weekStart)} to ${formatDateShort(addDays(state.weekStart, 6))}`,
+    shifts: shifts.map((shift) => ({
+      employeeId: shift.employeeId,
+      dayOffset: daysBetween(state.weekStart, parseDateKey(shift.date)),
+      start: shift.start,
+      end: shift.end,
+      area: shift.area,
+      status: shift.status,
+      published: false,
+      notes: shift.notes || "",
+    })),
+  };
+
+  syncSaveStatus(`Copied week (${state.copiedWeek.shifts.length} shifts)`);
+  render();
+}
+
+function pasteCopiedWeek(button = null) {
+  if (!isScheduleAdmin()) {
+    syncSaveStatus("Only admins can paste schedules", true);
+    return;
+  }
+
+  if (!state.copiedWeek?.shifts?.length) {
+    syncSaveStatus("Copy a week first", true);
+    return;
+  }
+
+  const existingShifts = weekShifts();
+  if (
+    existingShifts.length &&
+    typeof confirm === "function" &&
+    !confirm(`This week already has ${existingShifts.length} shift${existingShifts.length === 1 ? "" : "s"}. Paste copied shifts as well?`)
+  ) {
+    return;
+  }
+
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Pasting...";
+  }
+
+  const pastedShifts = state.copiedWeek.shifts.map((shift) => ({
+    ...shift,
+    id: crypto.randomUUID(),
+    date: toDateKey(addDays(state.weekStart, shift.dayOffset)),
+    published: false,
+  }));
+
+  state.data.shifts.push(...pastedShifts);
+  saveData();
+  notifyTeam("Schedule week pasted", `${formatDateShort(state.weekStart)} to ${formatDateShort(addDays(state.weekStart, 6))}`, false, false, { url: "/?page=schedule" });
+  syncSaveStatus(`Pasted week (${pastedShifts.length} shifts)`);
+  render();
+}
+
+function publishCurrentWeek(button = null) {
   if (!isScheduleAdmin()) {
     syncSaveStatus("Only admins can publish schedules", true);
     return;
   }
 
+  if (state.publishingWeek) return;
+
   const shifts = weekShifts().filter((shift) => !shift.published);
-  if (!shifts.length) return;
+  if (!shifts.length) {
+    syncSaveStatus("No unpublished shifts this week");
+    return;
+  }
+
+  state.publishingWeek = true;
+  if (button) {
+    button.disabled = true;
+    button.textContent = "Publishing...";
+  }
+  syncSaveStatus("Publishing week");
 
   shifts.forEach((shift) => {
     shift.published = true;
@@ -1839,6 +1944,7 @@ function publishCurrentWeek() {
 
   saveData();
   notifyTeam("Schedule published", `${formatDateShort(state.weekStart)} to ${formatDateShort(addDays(state.weekStart, 6))}`, false, true, { url: "/?page=schedule" });
+  state.publishingWeek = false;
   syncSaveStatus("Week published to employees");
   render();
 }
@@ -3003,6 +3109,17 @@ function findEmployee(employeeId) {
   );
 }
 
+function sortedEmployees() {
+  return [...state.data.employees].sort((a, b) => compareEmployeeNames(a.id, b.id));
+}
+
+function compareEmployeeNames(employeeIdA, employeeIdB) {
+  return findEmployee(employeeIdA).name.localeCompare(findEmployee(employeeIdB).name, undefined, {
+    numeric: true,
+    sensitivity: "base",
+  });
+}
+
 function colorForEmployee(employeeId) {
   const value = String(employeeId || "");
   let hash = 0;
@@ -3035,7 +3152,7 @@ function shiftsForDate(dateKey) {
     .filter((shift) => shift.date === dateKey)
     .filter(canSeeShift)
     .filter((shift) => state.scheduleEmployeeFilterId === "all" || shift.employeeId === state.scheduleEmployeeFilterId)
-    .sort((a, b) => a.start.localeCompare(b.start));
+    .sort((a, b) => compareEmployeeNames(a.employeeId, b.employeeId) || a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
 }
 
 function weekShifts() {
@@ -3104,6 +3221,15 @@ function addDays(date, days) {
   const copy = new Date(date);
   copy.setDate(copy.getDate() + days);
   return copy;
+}
+
+function daysBetween(startDate, endDate) {
+  const oneDay = 24 * 60 * 60 * 1000;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  return Math.round((end - start) / oneDay);
 }
 
 function toDateKey(date) {
