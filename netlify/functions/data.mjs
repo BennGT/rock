@@ -170,7 +170,10 @@ function upsertOwnEmployee(currentEmployees, incomingEmployee, user, employeeId)
     phone: cleanText(incomingEmployee.phone),
     nextOfKinName: cleanText(incomingEmployee.nextOfKinName),
     nextOfKinPhone: cleanText(incomingEmployee.nextOfKinPhone),
-    color: existing.color || colorForText(user.email),
+    color: cleanColor(incomingEmployee.color) || existing.color || colorForText(user.email),
+    color2: cleanColor(incomingEmployee.color2) || existing.color2 || "#087aa3",
+    color3: cleanColor(incomingEmployee.color3) || existing.color3 || "#d84a2a",
+    avatar: incomingEmployee.avatar?.dataUrl ? incomingEmployee.avatar : existing.avatar || null,
     status: existing.status || "Available",
     profileComplete: Boolean(cleanText(incomingEmployee.name) && cleanText(incomingEmployee.initials)),
   };
@@ -212,6 +215,9 @@ function dataForUser(data, user) {
         role: employee.role,
         status: employee.status,
         color: employee.color,
+        color2: employee.color2,
+        color3: employee.color3,
+        avatar: employee.avatar || null,
         email: "",
         phone: "",
         nextOfKinName: "",
@@ -256,6 +262,11 @@ function colorForText(text) {
     hash = (hash * 31 + value.charCodeAt(index)) % palette.length;
   }
   return palette[hash] || palette[0];
+}
+
+function cleanColor(color) {
+  const value = String(color || "").trim();
+  return /^#[0-9a-f]{6}$/i.test(value) ? value : "";
 }
 
 function normalizeEmail(email) {

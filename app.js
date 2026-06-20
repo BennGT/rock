@@ -20,6 +20,7 @@ const state = {
   copiedShift: null,
   copiedWeek: null,
   publishingWeek: false,
+  archivePrompted: false,
   deferredInstallPrompt: null,
   cloudStatus: "local",
   cloudSaveTimer: null,
@@ -249,7 +250,7 @@ function bindChrome() {
     if (event.target === employeeModal) closeEmployeeModal();
   });
 
-  employeeForm.addEventListener("submit", (event) => {
+  employeeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!isOwnerAdmin()) {
       syncSaveStatus("Only admins can edit employees", true);
@@ -267,9 +268,21 @@ function bindChrome() {
     employee.nextOfKinName = (employee.nextOfKinName || "").trim();
     employee.nextOfKinPhone = (employee.nextOfKinPhone || "").trim();
     employee.color = normalizeColor(employee.color) || employeeColorPalette[state.data.employees.length % employeeColorPalette.length];
+    employee.color2 = normalizeColor(employee.color2) || "#087aa3";
+    employee.color3 = normalizeColor(employee.color3) || "#d84a2a";
     employee.id = state.editingEmployeeId || crypto.randomUUID();
-
     const existingIndex = state.data.employees.findIndex((item) => item.id === employee.id);
+    const avatarFile = employeeForm.elements.avatarFile?.files?.[0] || null;
+    delete employee.avatarFile;
+
+    if (avatarFile) {
+      const avatar = await readAvatarFile(avatarFile);
+      if (!avatar) return;
+      employee.avatar = avatar;
+    } else if (existingIndex >= 0) {
+      employee.avatar = state.data.employees[existingIndex].avatar || null;
+    }
+
     if (existingIndex >= 0) {
       state.data.employees[existingIndex] = employee;
     } else {
@@ -389,12 +402,13 @@ function bindViewEvents() {
     });
   });
 
-  appView.querySelectorAll("[data-schedule-filter]").forEach((button) => {
-    button.addEventListener("click", () => {
-      state.scheduleEmployeeFilterId = button.dataset.scheduleFilter;
+  const scheduleStaffFilter = appView.querySelector("#scheduleStaffFilter");
+  if (scheduleStaffFilter) {
+    scheduleStaffFilter.addEventListener("change", () => {
+      state.scheduleEmployeeFilterId = scheduleStaffFilter.value;
       render();
     });
-  });
+  }
 
   appView.querySelectorAll("[data-view-employee-schedule]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -437,6 +451,23 @@ function bindViewEvents() {
   appView.querySelectorAll("[data-action='import-data']").forEach((button) => {
     button.addEventListener("click", () => backupFileInput.click());
   });
+
+  appView.querySelectorAll("[data-action='archive-old-shifts']").forEach((button) => {
+    button.addEventListener("click", () => archiveOldShifts({ force: true }));
+  });
+
+  appView.querySelectorAll("[data-export-archive]").forEach((button) => {
+    button.addEventListener("click", () => exportScheduleArchive(button.dataset.exportArchive));
+  });
+
+  const archiveModeSelect = appView.querySelector("#archiveModeSelect");
+  if (archiveModeSelect) {
+    archiveModeSelect.addEventListener("change", () => {
+      state.data.scheduleArchiveMode = archiveModeSelect.value;
+      saveData();
+      syncSaveStatus("Archive setting saved");
+    });
+  }
 
   appView.querySelectorAll("[data-action='install-app']").forEach((button) => {
     button.addEventListener("click", installApp);
@@ -514,9 +545,28 @@ function bindViewEvents() {
   appView.querySelectorAll("[data-remove-area]").forEach((button) => {
     button.addEventListener("click", () => {
       const area = button.dataset.removeArea;
-      if (isAreaInUse(area) || state.data.areas.length <= 1) return;
+      if (isAreaLocked(area) || state.data.areas.length <= 1) return;
       state.data.areas = state.data.areas.filter((item) => item !== area);
       saveData();
+      render();
+    });
+  });
+
+  appView.querySelectorAll("[data-area-form]").forEach((form) => {
+    form.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const original = form.dataset.areaForm;
+      const next = String(new FormData(form).get("areaName") || "").trim();
+      if (!original || !next || original === next) return;
+      if (state.data.areas.some((area) => area.toLowerCase() === next.toLowerCase() && area !== original)) {
+        syncSaveStatus("That work area already exists", true);
+        return;
+      }
+
+      state.data.areas = state.data.areas.map((area) => (area === original ? next : area));
+      state.data.shifts = state.data.shifts.map((shift) => (shift.area === original ? { ...shift, area: next } : shift));
+      saveData();
+      syncSaveStatus("Work area updated");
       render();
     });
   });
@@ -703,6 +753,18 @@ function readFileAsDataUrl(file) {
   });
 }
 
+async function readAvatarFile(file) {
+  if (!file.type.startsWith("image/")) {
+    syncSaveStatus("Avatar must be an image", true);
+    return null;
+  }
+  if (file.size > 512 * 1024) {
+    syncSaveStatus("Avatar image must be under 512 KB", true);
+    return null;
+  }
+  return readFileAsDataUrl(file);
+}
+
 function navigateToView(view, options = {}) {
   const nextView = views[view] ? view : defaultView;
   state.view = nextView;
@@ -863,32 +925,32 @@ function renderSchedule() {
   return `
     <div class="schedule-layout">
       <div class="schedule-toolbar">
-        <div class="segmented" aria-label="Week controls">
-          <button data-week="-1" type="button">Previous</button>
-          <button data-week="0" class="active" type="button">${rangeLabel}</button>
-          <button data-week="1" type="button">Next</button>
+        <div class="schedule-control-stack">
+          <div class="segmented" aria-label="Week controls">
+            <button data-week="-1" type="button">Previous</button>
+            <button data-week="0" class="active" type="button">${rangeLabel}</button>
+            <button data-week="1" type="button">Next</button>
+          </div>
+          <label class="staff-filter">
+            <span>Staff</span>
+            <select id="scheduleStaffFilter" aria-label="Schedule staff filter">
+              <option value="all" ${state.scheduleEmployeeFilterId === "all" ? "selected" : ""}>All staff</option>
+              ${sortedEmployees()
+                .map((employee) => `<option value="${employee.id}" ${state.scheduleEmployeeFilterId === employee.id ? "selected" : ""}>${employee.name}</option>`)
+                .join("")}
+            </select>
+          </label>
         </div>
-      </div>
-
-      ${
-        isScheduleAdmin()
-          ? `<div class="schedule-actions" aria-label="Schedule actions">
-              <button class="ghost-button" data-action="copy-week" type="button">Copy week</button>
-              <button class="ghost-button" data-action="paste-week" type="button" ${copiedWeekCount ? "" : "disabled"}>Paste week</button>
-              <button class="ghost-button" data-action="publish-week" type="button" ${publishDisabled ? "disabled" : ""}>${state.publishingWeek ? "Publishing..." : "Publish week"}</button>
-              <button class="primary-button" data-action="new-shift" type="button">New shift</button>
-            </div>`
-          : ""
-      }
-
-      <div class="filter-strip" aria-label="Schedule staff filter">
-        <button class="mini-button ${state.scheduleEmployeeFilterId === "all" ? "active" : ""}" data-schedule-filter="all" type="button">All staff</button>
-        ${sortedEmployees()
-          .map(
-            (employee) =>
-              `<button class="mini-button ${state.scheduleEmployeeFilterId === employee.id ? "active" : ""}" data-schedule-filter="${employee.id}" type="button">${employee.name}</button>`,
-          )
-          .join("")}
+        ${
+          isScheduleAdmin()
+            ? `<div class="schedule-actions" aria-label="Schedule actions">
+                <button class="ghost-button" data-action="copy-week" type="button">Copy week</button>
+                <button class="ghost-button" data-action="paste-week" type="button" ${copiedWeekCount ? "" : "disabled"}>Paste week</button>
+                <button class="ghost-button" data-action="publish-week" type="button" ${publishDisabled ? "disabled" : ""}>${state.publishingWeek ? "Publishing..." : "Publish week"}</button>
+                <button class="primary-button" data-action="new-shift" type="button">New shift</button>
+              </div>`
+            : ""
+        }
       </div>
       ${!isScheduleAdmin() && selectedEmployee ? `<div class="copy-banner">Showing ${selectedEmployee.name}'s published shifts.</div>` : ""}
 
@@ -1123,6 +1185,30 @@ function renderSetup() {
         </div>
       </section>
 
+      <section class="panel wide-panel">
+        <div class="panel-head">
+          <div>
+            <h2 class="panel-title">Schedule logs</h2>
+            <p class="panel-subtitle">Move shifts older than one month out of the active schedule</p>
+          </div>
+        </div>
+        <div class="panel-body form-stack">
+          <label>
+            Old schedule saving
+            <select id="archiveModeSelect">
+              <option value="auto" ${state.data.scheduleArchiveMode === "auto" ? "selected" : ""}>Automatic</option>
+              <option value="ask" ${state.data.scheduleArchiveMode === "ask" ? "selected" : ""}>Ask before saving</option>
+            </select>
+          </label>
+          <div class="backup-actions">
+            <button class="primary-button" data-action="archive-old-shifts" type="button">Archive old shifts now</button>
+          </div>
+          <div class="config-list">
+            ${renderScheduleArchiveRows()}
+          </div>
+        </div>
+      </section>
+
       ${renderPhoneAlertsPanel()}
 
       ${
@@ -1181,6 +1267,10 @@ function renderPersonalDetailsPanel() {
         phone: "",
         nextOfKinName: "",
         nextOfKinPhone: "",
+        color: employeeColorPalette[0],
+        color2: "#087aa3",
+        color3: "#d84a2a",
+        avatar: null,
       };
 
   return `
@@ -1217,6 +1307,30 @@ function renderPersonalDetailsPanel() {
             Next of kin phone
             <input name="nextOfKinPhone" type="tel" value="${escapeHtml(profile.nextOfKinPhone)}" />
           </label>
+          <label>
+            Main colour
+            <input name="color" type="color" value="${escapeHtml(normalizeColor(profile.color) || employeeColorPalette[0])}" />
+          </label>
+          <label>
+            Second colour
+            <input name="color2" type="color" value="${escapeHtml(normalizeColor(profile.color2) || "#087aa3")}" />
+          </label>
+          <label>
+            Third colour
+            <input name="color3" type="color" value="${escapeHtml(normalizeColor(profile.color3) || "#d84a2a")}" />
+          </label>
+          <label>
+            Avatar photo
+            <input name="avatarFile" type="file" accept="image/*" />
+          </label>
+          <div class="profile-preview full-field">
+            ${renderAvatar(profile, "profile-avatar")}
+            <div>
+              <strong>${escapeHtml(profile.name || "Your profile")}</strong>
+              <span>Upload a square photo under 512 KB.</span>
+              ${renderColorSwatches(profile)}
+            </div>
+          </div>
           <div class="modal-actions full-field">
             <button class="primary-button" type="submit">Save my details</button>
           </div>
@@ -1271,7 +1385,7 @@ function renderShiftItem(shift) {
     <button class="shift-item" data-shift-id="${shift.id}" type="button" style="border-left-color: ${employeeColor}">
       <div class="shift-main">
         <div class="person-line">
-          <span class="avatar" style="background: ${softColor(employeeColor)}; color: ${employeeColor}">${employee.initials}</span>
+          ${renderAvatar(employee)}
           <div>
             <strong>${employee.name}</strong>
             <span>${shift.area}</span>
@@ -1298,8 +1412,8 @@ function renderScheduleShift(shift) {
         ${shift.published ? statusPill(shift.status) : statusPill("Unpublished")}
       </div>
       <div class="schedule-person">
-        <span class="avatar small-avatar" style="background: ${softColor(employeeColor)}; color: ${employeeColor}">${employee.initials}</span>
-        <strong>${employee.name}</strong>
+        ${renderAvatar(employee, "small-avatar")}
+        <strong>${escapeHtml(scheduleDisplayName(employee))}</strong>
       </div>
       <span>${shift.area}</span>
       ${
@@ -1489,10 +1603,11 @@ function renderStaffItem(employee) {
     <article class="staff-item" style="border-left-color: ${employeeColor}">
       <div class="staff-main">
         <div class="person-line">
-          <span class="avatar" style="background: ${softColor(employeeColor)}; color: ${employeeColor}">${employee.initials}</span>
+          ${renderAvatar(employee)}
           <div>
             <strong>${employee.name}</strong>
             <span>${employee.role}</span>
+            ${renderColorSwatches(employee)}
           </div>
         </div>
         ${statusPill(employee.status)}
@@ -1518,19 +1633,42 @@ function renderStaffItem(employee) {
 
 function renderAreaRow(area) {
   const usage = areaUsage(area);
-  const locked = usage || state.data.areas.length <= 1;
+  const activeUsage = activeAreaUsage(area);
+  const locked = activeUsage || state.data.areas.length <= 1;
   return `
-    <div class="config-row">
-      <div>
-        <strong>${escapeHtml(area)}</strong>
-        <span>${usage ? `${usage} linked item${usage === 1 ? "" : "s"}` : "Not in use"}</span>
-      </div>
+    <div class="config-row area-config-row">
+      <form class="inline-form area-edit-form" data-area-form="${escapeHtml(area)}">
+        <input name="areaName" type="text" value="${escapeHtml(area)}" aria-label="Work area name" required />
+        <button class="ghost-button" type="submit">Save</button>
+      </form>
+      <span>${activeUsage ? `${activeUsage} active/upcoming shift${activeUsage === 1 ? "" : "s"}` : usage ? "Only used by finished shifts" : "Not in use"}</span>
       <button class="ghost-button" data-remove-area="${escapeHtml(area)}" type="button" ${locked ? "disabled" : ""}>Remove</button>
     </div>
   `;
 }
 
-function savePersonalDetails(event) {
+function renderScheduleArchiveRows() {
+  const archives = Array.isArray(state.data.scheduleArchives) ? state.data.scheduleArchives : [];
+  if (!archives.length) return `<div class="empty-state">No schedule logs saved yet.</div>`;
+
+  return archives
+    .slice()
+    .sort((a, b) => String(b.month).localeCompare(String(a.month)))
+    .map(
+      (archive) => `
+        <div class="config-row">
+          <div>
+            <strong>${escapeHtml(archive.label || archive.month)}</strong>
+            <span>${archive.shifts?.length || 0} shift${archive.shifts?.length === 1 ? "" : "s"} archived</span>
+          </div>
+          <button class="ghost-button" data-export-archive="${escapeHtml(archive.id)}" type="button">Export log</button>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+async function savePersonalDetails(event) {
   event.preventDefault();
   const employee = getOwnEmployeeProfile();
   const accountEmail = normalizeEmail(state.authUser?.email);
@@ -1555,6 +1693,9 @@ function savePersonalDetails(event) {
       nextOfKinName: "",
       nextOfKinPhone: "",
       color: colorForEmployee(employeeId),
+      color2: "#087aa3",
+      color3: "#d84a2a",
+      avatar: null,
       status: "Available",
     });
     existingIndex = state.data.employees.length - 1;
@@ -1569,8 +1710,18 @@ function savePersonalDetails(event) {
     phone: String(formData.get("phone") || "").trim(),
     nextOfKinName: String(formData.get("nextOfKinName") || "").trim(),
     nextOfKinPhone: String(formData.get("nextOfKinPhone") || "").trim(),
+    color: normalizeColor(formData.get("color")) || state.data.employees[existingIndex].color || colorForEmployee(employeeId),
+    color2: normalizeColor(formData.get("color2")) || state.data.employees[existingIndex].color2 || "#087aa3",
+    color3: normalizeColor(formData.get("color3")) || state.data.employees[existingIndex].color3 || "#d84a2a",
     profileComplete: true,
   };
+
+  const avatarFile = event.currentTarget.elements.avatarFile?.files?.[0] || null;
+  if (avatarFile) {
+    const avatar = await readAvatarFile(avatarFile);
+    if (!avatar) return;
+    state.data.employees[existingIndex].avatar = avatar;
+  }
 
   saveData();
   syncCurrentEmployeeFromAuth();
@@ -1967,6 +2118,9 @@ function openEmployeeModal(employeeId = null) {
         nextOfKinName: "",
         nextOfKinPhone: "",
         color: employeeColorPalette[state.data.employees.length % employeeColorPalette.length],
+        color2: "#087aa3",
+        color3: "#d84a2a",
+        avatar: null,
         status: "Available",
       };
 
@@ -2831,6 +2985,7 @@ async function loadCloudData(options = {}) {
       syncInstallButton();
       syncNotificationButton();
       hydrateUserSelect();
+      runScheduleArchiveCheck();
       if (!isTypingInAppView()) render();
       state.cloudStatus = "synced";
       state.localChangedDuringCloudLoad = false;
@@ -3008,6 +3163,96 @@ function importBackup(event) {
   reader.readAsText(file);
 }
 
+function runScheduleArchiveCheck() {
+  if (!isOwnerAdmin()) return;
+  archiveOldShifts();
+}
+
+function archiveOldShifts(options = {}) {
+  if (!isOwnerAdmin()) return false;
+  const oldShifts = shiftsOlderThanArchiveCutoff();
+  if (!oldShifts.length) {
+    if (options.force) syncSaveStatus("No shifts older than one month to archive");
+    return false;
+  }
+
+  const mode = state.data.scheduleArchiveMode || "auto";
+  if (!options.force && mode === "ask") {
+    if (state.archivePrompted) return false;
+    state.archivePrompted = true;
+    if (typeof confirm === "function" && !confirm(`Save ${oldShifts.length} old shift${oldShifts.length === 1 ? "" : "s"} to Schedule logs and remove them from the active schedule?`)) {
+      return false;
+    }
+  }
+
+  const oldShiftIds = new Set(oldShifts.map((shift) => shift.id));
+  const grouped = oldShifts.reduce((groups, shift) => {
+    const month = shift.date.slice(0, 7);
+    if (!groups[month]) groups[month] = [];
+    groups[month].push(shift);
+    return groups;
+  }, {});
+
+  const archives = Array.isArray(state.data.scheduleArchives) ? [...state.data.scheduleArchives] : [];
+  Object.entries(grouped).forEach(([month, shifts]) => {
+    const existingIndex = archives.findIndex((archive) => archive.month === month);
+    const archivedShifts = shifts.map((shift) => ({
+      ...shift,
+      employeeName: findEmployee(shift.employeeId).name,
+    }));
+
+    if (existingIndex >= 0) {
+      const existing = archives[existingIndex];
+      const existingIds = new Set((existing.shifts || []).map((shift) => shift.id));
+      archives[existingIndex] = {
+        ...existing,
+        archivedAt: new Date().toISOString(),
+        shifts: [...(existing.shifts || []), ...archivedShifts.filter((shift) => !existingIds.has(shift.id))],
+      };
+    } else {
+      archives.push({
+        id: crypto.randomUUID(),
+        month,
+        label: formatMonthLabel(month),
+        archivedAt: new Date().toISOString(),
+        shifts: archivedShifts,
+      });
+    }
+  });
+
+  state.data.scheduleArchives = archives;
+  state.data.shifts = state.data.shifts.filter((shift) => !oldShiftIds.has(shift.id));
+  saveData();
+  syncSaveStatus(`Archived ${oldShifts.length} old shift${oldShifts.length === 1 ? "" : "s"}`);
+  if (state.view === "setup" || state.view === "schedule") render();
+  return true;
+}
+
+function shiftsOlderThanArchiveCutoff() {
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 1);
+  cutoff.setHours(0, 0, 0, 0);
+  return state.data.shifts.filter((shift) => {
+    const shiftDate = parseDateKey(shift.date);
+    return shiftDate < cutoff;
+  });
+}
+
+function exportScheduleArchive(archiveId) {
+  const archive = (state.data.scheduleArchives || []).find((item) => item.id === archiveId);
+  if (!archive) return;
+  const blob = new Blob([JSON.stringify(archive, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `sherif-schedule-log-${archive.month}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  syncSaveStatus("Schedule log exported");
+}
+
 function normalizeData(data) {
   const defaults = createSeedData();
   const merged = {
@@ -3030,6 +3275,8 @@ function normalizeData(data) {
     !data.businessSubtitle || data.businessSubtitle === "Business workforce" ? defaults.businessSubtitle : data.businessSubtitle;
   merged.appInstalled = Boolean(data.appInstalled);
   merged.notificationsEnabled = Boolean(data.notificationsEnabled);
+  merged.scheduleArchiveMode = ["auto", "ask"].includes(data.scheduleArchiveMode) ? data.scheduleArchiveMode : "auto";
+  merged.scheduleArchives = Array.isArray(data.scheduleArchives) ? data.scheduleArchives : [];
 
   merged.employees = merged.employees.map((employee) => ({
     ...employee,
@@ -3040,6 +3287,9 @@ function normalizeData(data) {
     nextOfKinName: employee.nextOfKinName || "",
     nextOfKinPhone: employee.nextOfKinPhone || "",
     color: normalizeColor(employee.color) || colorForEmployee(employee.id),
+    color2: normalizeColor(employee.color2) || "#087aa3",
+    color3: normalizeColor(employee.color3) || "#d84a2a",
+    avatar: employee.avatar?.dataUrl ? employee.avatar : null,
     profileComplete: Boolean(employee.profileComplete),
   }));
 
@@ -3074,6 +3324,8 @@ function createSeedData() {
     messages: [],
     deletedMessageIds: [],
     deletedRequestIds: [],
+    scheduleArchiveMode: "auto",
+    scheduleArchives: [],
     requests: [],
   };
 }
@@ -3104,9 +3356,35 @@ function findEmployee(employeeId) {
       nextOfKinName: "",
       nextOfKinPhone: "",
       color: "#6b7280",
+      color2: "#087aa3",
+      color3: "#d84a2a",
+      avatar: null,
       status: "Unavailable",
     }
   );
+}
+
+function renderAvatar(employee, extraClass = "") {
+  const employeeColor = employee.color || colorForEmployee(employee.id);
+  const classes = `avatar ${extraClass}`.trim();
+  if (employee.avatar?.dataUrl) {
+    return `<span class="${classes}" style="background: ${softColor(employeeColor)}"><img src="${escapeHtml(employee.avatar.dataUrl)}" alt="${escapeHtml(employee.name)}" loading="lazy" /></span>`;
+  }
+  return `<span class="${classes}" style="background: ${softColor(employeeColor)}; color: ${employeeColor}">${escapeHtml(employee.initials || makeInitials(employee.name))}</span>`;
+}
+
+function renderColorSwatches(employee) {
+  const colors = [employee.color, employee.color2, employee.color3].map(normalizeColor).filter(Boolean);
+  if (!colors.length) return "";
+  return `<span class="profile-swatches">${colors.map((color) => `<i style="background: ${color}"></i>`).join("")}</span>`;
+}
+
+function scheduleDisplayName(employee) {
+  return firstName(employee.name);
+}
+
+function firstName(name) {
+  return String(name || "Unassigned").trim().split(/\s+/)[0] || "Unassigned";
 }
 
 function sortedEmployees() {
@@ -3178,8 +3456,18 @@ function areaUsage(area) {
   return state.data.shifts.filter((shift) => shift.area === area).length;
 }
 
-function isAreaInUse(area) {
-  return areaUsage(area) > 0;
+function activeAreaUsage(area) {
+  return state.data.shifts.filter((shift) => shift.area === area && shiftEndsAfterNow(shift)).length;
+}
+
+function isAreaLocked(area) {
+  return activeAreaUsage(area) > 0;
+}
+
+function shiftEndsAfterNow(shift) {
+  if (!shift.date) return false;
+  const endDate = new Date(`${shift.date}T${shift.end || "23:59"}`);
+  return endDate > new Date();
 }
 
 function uniqueSlug(value, existing) {
@@ -3259,6 +3547,14 @@ function formatDateShort(date) {
     day: "numeric",
     month: "short",
   }).format(new Date(date));
+}
+
+function formatMonthLabel(monthKey) {
+  const [year, month] = String(monthKey).split("-");
+  return new Intl.DateTimeFormat("en-AU", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(Number(year), Number(month) - 1, 1));
 }
 
 function formatDateFull(date) {

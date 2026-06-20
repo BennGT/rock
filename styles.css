@@ -698,6 +698,55 @@ h3 {
   color: var(--accent);
   font-size: 13px;
   font-weight: 900;
+  overflow: hidden;
+}
+
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.profile-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.profile-preview strong,
+.profile-preview span {
+  display: block;
+}
+
+.profile-preview span {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.profile-avatar {
+  width: 56px;
+  height: 56px;
+}
+
+.profile-swatches {
+  display: flex;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.profile-swatches i {
+  width: 18px;
+  height: 8px;
+  display: block;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .person-line {
@@ -723,21 +772,51 @@ h3 {
 }
 
 .schedule-toolbar {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(260px, 360px);
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  flex-wrap: wrap;
+}
+
+.schedule-control-stack {
+  display: grid;
+  gap: 10px;
+  align-content: start;
 }
 
 .schedule-actions {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .schedule-actions button {
   width: 100%;
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.staff-filter {
+  width: min(360px, 100%);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.staff-filter select {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: var(--ink);
+  font-weight: 800;
 }
 
 .copy-banner {
@@ -814,7 +893,17 @@ h3 {
 }
 
 .day-column.today {
-  border-color: #87aefb;
+  border-color: var(--teal);
+  box-shadow: 0 0 0 2px rgba(8, 122, 163, 0.12);
+}
+
+.day-column.today .day-head {
+  background: var(--blue-soft);
+  border-bottom-color: rgba(8, 122, 163, 0.28);
+}
+
+.day-column.today .day-head strong {
+  color: var(--teal);
 }
 
 .day-shifts {
@@ -976,6 +1065,17 @@ h3 {
   margin-top: 3px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.area-config-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.area-edit-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  margin-bottom: 0;
 }
 
 .channel-row {
@@ -1458,8 +1558,21 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .schedule-toolbar {
+    grid-template-columns: 1fr;
+  }
+
   .schedule-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .staff-filter {
+    width: 100%;
+  }
+
+  .area-config-row,
+  .area-edit-form {
+    grid-template-columns: 1fr;
   }
 
   .topbar-actions button,
