@@ -17,6 +17,9 @@ const state = {
   scheduleView: "today",
   scheduleEmployeeFilterId: "all",
   weekScrollLock: false,
+  weekTouchStartX: 0,
+  weekTouchStartY: 0,
+  weekTouchStartScrollLeft: 0,
   editingShiftId: null,
   editingEmployeeId: null,
   copiedShift: null,
@@ -436,6 +439,8 @@ function bindViewEvents() {
   const weekGrid = appView.querySelector(".week-grid");
   if (weekGrid) {
     weekGrid.addEventListener("wheel", handleWeekGridBoundaryScroll, { passive: false });
+    weekGrid.addEventListener("touchstart", handleWeekGridTouchStart, { passive: true });
+    weekGrid.addEventListener("touchend", handleWeekGridTouchEnd, { passive: true });
   }
 
   const scheduleStaffFilter = appView.querySelector("#scheduleStaffFilter");
@@ -845,6 +850,37 @@ function handleWeekGridBoundaryScroll(event) {
   if (!step) return;
 
   event.preventDefault();
+  changeWeekFromBoundary(step);
+}
+
+function handleWeekGridTouchStart(event) {
+  const touch = event.touches[0];
+  if (!touch) return;
+  state.weekTouchStartX = touch.clientX;
+  state.weekTouchStartY = touch.clientY;
+  state.weekTouchStartScrollLeft = event.currentTarget.scrollLeft;
+}
+
+function handleWeekGridTouchEnd(event) {
+  const touch = event.changedTouches[0];
+  const grid = event.currentTarget;
+  if (!touch || grid.scrollWidth <= grid.clientWidth + 2 || state.weekScrollLock) return;
+
+  const deltaX = touch.clientX - state.weekTouchStartX;
+  const deltaY = touch.clientY - state.weekTouchStartY;
+  if (Math.abs(deltaX) < 44 || Math.abs(deltaX) < Math.abs(deltaY) * 1.15) return;
+
+  const startedAtLeft = state.weekTouchStartScrollLeft <= 2;
+  const startedAtRight = state.weekTouchStartScrollLeft + grid.clientWidth >= grid.scrollWidth - 2;
+  const endedAtLeft = grid.scrollLeft <= 2;
+  const endedAtRight = grid.scrollLeft + grid.clientWidth >= grid.scrollWidth - 2;
+  const step = deltaX < 0 && (startedAtRight || endedAtRight) ? 1 : deltaX > 0 && (startedAtLeft || endedAtLeft) ? -1 : 0;
+  if (!step) return;
+
+  changeWeekFromBoundary(step);
+}
+
+function changeWeekFromBoundary(step) {
   state.weekScrollLock = true;
   state.weekStart = addDays(state.weekStart, step * 7);
   render();
