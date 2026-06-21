@@ -536,6 +536,10 @@ function bindViewEvents() {
     button.addEventListener("click", () => deleteRecoveryRequest(button.dataset.deleteRecoveryId));
   });
 
+  appView.querySelectorAll("[data-focus-reset-account]").forEach((button) => {
+    button.addEventListener("click", () => focusAccountPasswordReset(button.dataset.focusResetAccount));
+  });
+
   appView.querySelectorAll("[data-reset-password-form]").forEach((form) => {
     form.addEventListener("submit", resetAccountPassword);
   });
@@ -1867,14 +1871,14 @@ function renderChannelRow(channel) {
 function renderAccountRow(user) {
   const roleLabel = user.role === "admin" ? "Owner admin" : user.role === "manager" ? "Manager" : "Employee";
   return `
-    <div class="config-row account-row">
+    <div class="config-row account-row" data-account-row="${user.id}">
       <div>
         <strong>${escapeHtml(user.name)}</strong>
         <span>${escapeHtml(user.email)} - ${roleLabel}</span>
       </div>
       <form class="row-actions reset-password-form" data-reset-password-form="${user.id}">
         <span class="password-field">
-          <input name="newPassword" type="password" placeholder="New password" aria-label="New password for ${escapeHtml(user.name)}" minlength="8" required />
+          <input name="newPassword" type="password" placeholder="Temporary password" aria-label="New password for ${escapeHtml(user.name)}" minlength="8" autocomplete="new-password" required />
           <button class="ghost-button password-toggle" data-password-toggle type="button">Show</button>
         </span>
         <button class="ghost-button" type="submit">Reset</button>
@@ -1920,6 +1924,7 @@ function renderRecoveryRequestRow(request) {
         <span>${matchedUser ? `Matched account: ${escapeHtml(matchedUser.email)}` : "No exact email match"}</span>
       </div>
       <div class="row-actions">
+        ${matchedUser ? `<button class="primary-button" data-focus-reset-account="${matchedUser.id}" type="button">Reset password</button>` : ""}
         ${matchedUser ? `<button class="ghost-button" data-invite-account-id="${matchedUser.id}" type="button">Send login details</button>` : ""}
         <button class="ghost-button" data-delete-recovery-id="${request.id}" type="button">Done</button>
       </div>
@@ -2576,6 +2581,25 @@ async function deleteRecoveryRequest(requestId) {
   } catch (error) {
     syncSaveStatus(error.message || "Could not clear request", true);
   }
+}
+
+function focusAccountPasswordReset(userId) {
+  const row = appView.querySelector(`[data-account-row="${CSS.escape(userId)}"]`);
+  const form = appView.querySelector(`[data-reset-password-form="${CSS.escape(userId)}"]`);
+  const input = form?.elements.newPassword;
+  if (!row || !input) {
+    syncSaveStatus("Matched account could not be found", true);
+    return;
+  }
+
+  appView.querySelectorAll(".account-row.reset-target").forEach((item) => item.classList.remove("reset-target"));
+  row.classList.add("reset-target");
+  input.value = "";
+  input.type = "password";
+  form.querySelector("[data-password-toggle]")?.replaceChildren(document.createTextNode("Show"));
+  row.scrollIntoView({ behavior: "smooth", block: "center" });
+  requestAnimationFrame(() => input.focus({ preventScroll: true }));
+  syncSaveStatus("Enter a temporary password, then press Reset");
 }
 
 async function changeOwnPassword(event) {

@@ -1228,6 +1228,11 @@ h3 {
   grid-template-columns: minmax(180px, 1fr) minmax(220px, 0.9fr) auto;
 }
 
+.account-row.reset-target {
+  border-color: rgba(8, 122, 163, 0.48);
+  box-shadow: 0 0 0 3px rgba(8, 122, 163, 0.14);
+}
+
 .row-actions {
   display: flex;
   gap: 8px;
