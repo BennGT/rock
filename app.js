@@ -176,7 +176,7 @@ function bindChrome() {
   signOutButton.addEventListener("click", signOut);
   installAppButton.addEventListener("click", installApp);
   notificationButton.addEventListener("click", requestNotifications);
-  recoveryBellButton.addEventListener("click", () => navigateToView("setup"));
+  recoveryBellButton.addEventListener("click", openRecoveryRequests);
 
   if (typeof window !== "undefined") {
     window.addEventListener("popstate", () => {
@@ -805,6 +805,15 @@ function navigateToView(view, options = {}) {
   render();
 }
 
+function openRecoveryRequests() {
+  navigateToView("setup");
+  requestAnimationFrame(() => {
+    const target = document.querySelector("#signInHelpRequests");
+    target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    target?.querySelector("button, input")?.focus({ preventScroll: true });
+  });
+}
+
 function readViewFromUrl() {
   if (typeof window === "undefined") return defaultView;
   const view = new URLSearchParams(window.location.search).get("page");
@@ -1268,7 +1277,7 @@ function renderSetup() {
                 <div class="section-gap config-list">
                   ${state.authInvites.length ? state.authInvites.filter((invite) => !invite.acceptedAt).map(renderInviteRow).join("") : `<div class="empty-state">No pending invitations.</div>`}
                 </div>
-                <div class="section-gap config-list">
+                <div class="section-gap config-list" id="signInHelpRequests" tabindex="-1">
                   ${state.authRecoveryRequests.length ? state.authRecoveryRequests.map(renderRecoveryRequestRow).join("") : `<div class="empty-state">No sign-in help requests.</div>`}
                 </div>
                 <div class="config-list">

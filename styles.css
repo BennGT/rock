@@ -1181,6 +1181,12 @@ h3 {
   margin-top: 16px;
 }
 
+#signInHelpRequests:focus {
+  outline: 3px solid rgba(8, 122, 163, 0.24);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
 .config-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
