@@ -14,9 +14,12 @@ const teamChannel = {
 const state = {
   view: "dashboard",
   weekStart: startOfWeek(new Date()),
+  scheduleDay: toDateKey(new Date()),
   scheduleView: "today",
   scheduleEmployeeFilterId: "all",
   weekScrollLock: false,
+  dayTouchStartX: 0,
+  dayTouchStartY: 0,
   weekTouchStartX: 0,
   weekTouchStartY: 0,
   weekTouchStartScrollLeft: 0,
@@ -436,11 +439,21 @@ function bindViewEvents() {
     });
   });
 
+  appView.querySelectorAll("[data-day]").forEach((button) => {
+    button.addEventListener("click", () => changeScheduleDay(Number(button.dataset.day)));
+  });
+
   const weekGrid = appView.querySelector(".week-grid");
   if (weekGrid) {
     weekGrid.addEventListener("wheel", handleWeekGridBoundaryScroll, { passive: false });
     weekGrid.addEventListener("touchstart", handleWeekGridTouchStart, { passive: true });
     weekGrid.addEventListener("touchend", handleWeekGridTouchEnd, { passive: true });
+  }
+
+  const todayScheduleList = appView.querySelector(".today-schedule-list");
+  if (todayScheduleList) {
+    todayScheduleList.addEventListener("touchstart", handleTodayScheduleTouchStart, { passive: true });
+    todayScheduleList.addEventListener("touchend", handleTodayScheduleTouchEnd, { passive: true });
   }
 
   const scheduleStaffFilter = appView.querySelector("#scheduleStaffFilter");
@@ -861,6 +874,36 @@ function handleWeekGridTouchStart(event) {
   state.weekTouchStartScrollLeft = event.currentTarget.scrollLeft;
 }
 
+function handleTodayScheduleTouchStart(event) {
+  const touch = event.touches[0];
+  if (!touch) return;
+  state.dayTouchStartX = touch.clientX;
+  state.dayTouchStartY = touch.clientY;
+}
+
+function handleTodayScheduleTouchEnd(event) {
+  const touch = event.changedTouches[0];
+  if (!touch || state.weekScrollLock) return;
+
+  const deltaX = touch.clientX - state.dayTouchStartX;
+  const deltaY = touch.clientY - state.dayTouchStartY;
+  if (Math.abs(deltaX) < 44 || Math.abs(deltaX) < Math.abs(deltaY) * 1.15) return;
+
+  changeScheduleDay(deltaX < 0 ? 1 : -1);
+}
+
+function changeScheduleDay(step) {
+  state.weekScrollLock = true;
+  const currentDay = parseDateKey(state.scheduleDay || toDateKey(new Date()));
+  const nextDay = addDays(currentDay, step);
+  state.scheduleDay = toDateKey(nextDay);
+  state.weekStart = startOfWeek(nextDay);
+  render();
+  window.setTimeout(() => {
+    state.weekScrollLock = false;
+  }, 350);
+}
+
 function handleWeekGridTouchEnd(event) {
   const touch = event.changedTouches[0];
   const grid = event.currentTarget;
@@ -1018,6 +1061,7 @@ function openDashboardLink(link) {
   if (link === "my-schedule") {
     const currentUser = getCurrentUser();
     state.weekStart = startOfWeek(new Date());
+    state.scheduleDay = toDateKey(new Date());
     state.scheduleView = "today";
     state.scheduleEmployeeFilterId = currentUser.id || "all";
     navigateToView("schedule");
@@ -1026,6 +1070,7 @@ function openDashboardLink(link) {
 
   if (link === "today-schedule" || link === "schedule") {
     state.weekStart = startOfWeek(new Date());
+    state.scheduleDay = toDateKey(new Date());
     state.scheduleView = "today";
     state.scheduleEmployeeFilterId = "all";
     navigateToView("schedule");
@@ -1040,9 +1085,10 @@ function renderSchedule() {
   const selectedEmployee = state.scheduleEmployeeFilterId !== "all" ? findEmployee(state.scheduleEmployeeFilterId) : null;
   const copiedWeekCount = state.copiedWeek?.shifts?.length || 0;
   const publishDisabled = !unpublishedCount || state.publishingWeek;
-  const today = new Date();
-  const todayKey = toDateKey(today);
-  const todayShifts = shiftsForDate(todayKey);
+  const realTodayKey = toDateKey(new Date());
+  const scheduleDay = parseDateKey(state.scheduleDay || realTodayKey);
+  const scheduleDayKey = toDateKey(scheduleDay);
+  const todayShifts = shiftsForDate(scheduleDayKey);
 
   return `
     <div class="schedule-layout">
@@ -1060,8 +1106,12 @@ function renderSchedule() {
                   <button data-week="1" type="button">Next</button>
                 </div>`
               : `<div class="today-heading">
-                  <strong>Today</strong>
-                  <span>${formatDateFull(today)}</span>
+                  <button class="mini-button" data-day="-1" type="button">Previous day</button>
+                  <div>
+                    <strong>${scheduleDayKey === realTodayKey ? "Today" : formatWeekday(scheduleDay)}</strong>
+                    <span>${formatDateFull(scheduleDay)}</span>
+                  </div>
+                  <button class="mini-button" data-day="1" type="button">Next day</button>
                 </div>`
           }
           <label class="staff-filter">
@@ -1117,10 +1167,10 @@ function renderSchedule() {
               <section class="day-column today today-only">
                 <div class="day-head">
                   <div>
-                    <strong>${formatWeekday(today)}</strong>
-                    <span>${formatDateShort(today)}</span>
+                    <strong>${scheduleDayKey === realTodayKey ? "Today" : formatWeekday(scheduleDay)}</strong>
+                    <span>${formatDateShort(scheduleDay)}</span>
                   </div>
-                  ${state.copiedShift && isScheduleAdmin() ? `<button class="mini-button" data-paste-shift-date="${todayKey}" type="button">Paste</button>` : ""}
+                  ${state.copiedShift && isScheduleAdmin() ? `<button class="mini-button" data-paste-shift-date="${scheduleDayKey}" type="button">Paste</button>` : ""}
                 </div>
                 <div class="day-shifts">
                   ${todayShifts.length ? todayShifts.map(renderScheduleShift).join("") : `<div class="empty-state">No shifts today</div>`}
@@ -1133,7 +1183,7 @@ function renderSchedule() {
                   const key = toDateKey(day);
                   const dayShifts = shiftsForDate(key);
                   return `
-                    <section class="day-column ${key === todayKey ? "today" : ""}">
+                    <section class="day-column ${key === realTodayKey ? "today" : ""}">
                       <div class="day-head">
                         <div>
                           <strong>${formatWeekday(day)}</strong>
