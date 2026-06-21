@@ -2329,16 +2329,18 @@ function showForgotSignIn() {
   forgotSignInForm.elements.name.focus();
 }
 
-function showSignInForm() {
+function showSignInForm(message = "") {
   forgotSignInForm.classList.add("hidden");
   authForm.classList.remove("hidden");
-  authError.textContent = "";
+  authError.classList.remove("error");
+  authError.textContent = message;
   authForm.elements.email.focus();
 }
 
 async function initAuth() {
   if (!canUseCloudSync()) {
     state.setupRequired = false;
+    authError.classList.add("error");
     authError.textContent = "Sign in works after Sherif is deployed to Netlify over HTTPS.";
     syncAuthScreen();
     return;
@@ -2374,6 +2376,7 @@ async function initAuth() {
   } catch (error) {
     state.authUser = null;
     state.setupRequired = false;
+    authError.classList.add("error");
     authError.textContent = error.message || "Could not connect to sign in.";
     syncAuthScreen();
     console.error(error);
@@ -2407,6 +2410,7 @@ async function loadInviteDetails() {
 
 async function submitAuth(event) {
   event.preventDefault();
+  authError.classList.remove("error");
   authError.textContent = "";
   authSubmitButton.disabled = true;
 
@@ -2447,6 +2451,7 @@ async function submitAuth(event) {
     loadCloudData();
     startCloudRefresh();
   } catch (error) {
+    authError.classList.add("error");
     authError.textContent = error.message || "Sign in failed";
   } finally {
     authSubmitButton.disabled = false;
@@ -2473,7 +2478,7 @@ async function submitRecoveryRequest(event) {
     );
 
     form.reset();
-    forgotSignInStatus.textContent = "Request sent. An admin can reset your password or confirm your email.";
+    showSignInForm("Request has been sent");
   } catch (error) {
     forgotSignInStatus.classList.add("error");
     forgotSignInStatus.textContent = error.message || "Could not send request.";
