@@ -351,6 +351,8 @@ button {
 
 .notification-bell {
   position: relative;
+  margin-left: auto;
+  flex: 0 0 auto;
   width: 44px;
   min-height: 40px;
   display: inline-grid;
@@ -902,23 +904,56 @@ h3 {
   align-content: start;
 }
 
-.schedule-control-stack .segmented {
+.schedule-control-stack .week-control {
   width: max-content;
   max-width: 100%;
   display: grid;
   grid-template-columns: 88px minmax(150px, auto) 88px;
 }
 
-.schedule-control-stack .segmented button {
+.schedule-control-stack .week-control button {
   min-width: 0;
   padding: 0 10px;
   white-space: nowrap;
+}
+
+.schedule-view-toggle {
+  width: max-content;
+  display: grid;
+  grid-template-columns: repeat(2, 92px);
+}
+
+.today-heading {
+  display: grid;
+  gap: 2px;
+  width: max-content;
+  max-width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.today-heading strong {
+  color: var(--teal);
+}
+
+.today-heading span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .schedule-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
+}
+
+.schedule-actions.today-actions {
+  grid-template-columns: 1fr;
+  justify-self: end;
+  width: min(180px, 100%);
 }
 
 .schedule-actions button {
@@ -971,6 +1006,15 @@ h3 {
   gap: 10px;
   overflow-x: auto;
   padding-bottom: 4px;
+}
+
+.today-schedule-list {
+  display: grid;
+  max-width: 760px;
+}
+
+.today-only {
+  min-height: 260px;
 }
 
 .day-column {
@@ -1652,6 +1696,8 @@ textarea {
 
   .topbar {
     display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
     gap: 12px;
   }
 
@@ -1714,12 +1760,17 @@ textarea {
   }
 
   .schedule-control-stack,
-  .schedule-control-stack .segmented {
+  .schedule-control-stack .week-control,
+  .schedule-view-toggle {
     width: 100%;
   }
 
-  .schedule-control-stack .segmented {
+  .schedule-control-stack .week-control {
     grid-template-columns: 76px minmax(0, 1fr) 76px;
+  }
+
+  .schedule-view-toggle {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .schedule-control-stack .segmented button {

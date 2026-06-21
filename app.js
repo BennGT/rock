@@ -14,7 +14,9 @@ const teamChannel = {
 const state = {
   view: "dashboard",
   weekStart: startOfWeek(new Date()),
+  scheduleView: "today",
   scheduleEmployeeFilterId: "all",
+  weekScrollLock: false,
   editingShiftId: null,
   editingEmployeeId: null,
   copiedShift: null,
@@ -424,6 +426,18 @@ function bindViewEvents() {
     });
   });
 
+  appView.querySelectorAll("[data-schedule-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.scheduleView = button.dataset.scheduleView === "week" ? "week" : "today";
+      render();
+    });
+  });
+
+  const weekGrid = appView.querySelector(".week-grid");
+  if (weekGrid) {
+    weekGrid.addEventListener("wheel", handleWeekGridBoundaryScroll, { passive: false });
+  }
+
   const scheduleStaffFilter = appView.querySelector("#scheduleStaffFilter");
   if (scheduleStaffFilter) {
     scheduleStaffFilter.addEventListener("change", () => {
@@ -435,6 +449,7 @@ function bindViewEvents() {
   appView.querySelectorAll("[data-view-employee-schedule]").forEach((button) => {
     button.addEventListener("click", () => {
       state.scheduleEmployeeFilterId = button.dataset.viewEmployeeSchedule;
+      state.scheduleView = "week";
       navigateToView("schedule");
     });
   });
@@ -818,6 +833,26 @@ function openRecoveryRequests() {
   });
 }
 
+function handleWeekGridBoundaryScroll(event) {
+  const grid = event.currentTarget;
+  if (grid.scrollWidth <= grid.clientWidth + 2) return;
+  const scrollIntent = Math.abs(event.deltaX) > Math.abs(event.deltaY) ? event.deltaX : event.deltaY;
+  if (Math.abs(scrollIntent) < 20 || state.weekScrollLock) return;
+
+  const atLeft = grid.scrollLeft <= 2;
+  const atRight = grid.scrollLeft + grid.clientWidth >= grid.scrollWidth - 2;
+  const step = scrollIntent > 0 && atRight ? 1 : scrollIntent < 0 && atLeft ? -1 : 0;
+  if (!step) return;
+
+  event.preventDefault();
+  state.weekScrollLock = true;
+  state.weekStart = addDays(state.weekStart, step * 7);
+  render();
+  window.setTimeout(() => {
+    state.weekScrollLock = false;
+  }, 450);
+}
+
 function readViewFromUrl() {
   if (typeof window === "undefined") return defaultView;
   const view = new URLSearchParams(window.location.search).get("page");
@@ -947,6 +982,7 @@ function openDashboardLink(link) {
   if (link === "my-schedule") {
     const currentUser = getCurrentUser();
     state.weekStart = startOfWeek(new Date());
+    state.scheduleView = "today";
     state.scheduleEmployeeFilterId = currentUser.id || "all";
     navigateToView("schedule");
     return;
@@ -954,6 +990,7 @@ function openDashboardLink(link) {
 
   if (link === "today-schedule" || link === "schedule") {
     state.weekStart = startOfWeek(new Date());
+    state.scheduleView = "today";
     state.scheduleEmployeeFilterId = "all";
     navigateToView("schedule");
   }
@@ -967,16 +1004,30 @@ function renderSchedule() {
   const selectedEmployee = state.scheduleEmployeeFilterId !== "all" ? findEmployee(state.scheduleEmployeeFilterId) : null;
   const copiedWeekCount = state.copiedWeek?.shifts?.length || 0;
   const publishDisabled = !unpublishedCount || state.publishingWeek;
+  const today = new Date();
+  const todayKey = toDateKey(today);
+  const todayShifts = shiftsForDate(todayKey);
 
   return `
     <div class="schedule-layout">
       <div class="schedule-toolbar">
         <div class="schedule-control-stack">
-          <div class="segmented" aria-label="Week controls">
-            <button data-week="-1" type="button">Previous</button>
-            <button data-week="0" class="active" type="button">${rangeLabel}</button>
-            <button data-week="1" type="button">Next</button>
+          <div class="segmented schedule-view-toggle" aria-label="Schedule view">
+            <button data-schedule-view="today" class="${state.scheduleView === "today" ? "active" : ""}" type="button">Today</button>
+            <button data-schedule-view="week" class="${state.scheduleView === "week" ? "active" : ""}" type="button">Week</button>
           </div>
+          ${
+            state.scheduleView === "week"
+              ? `<div class="segmented week-control" aria-label="Week controls">
+                  <button data-week="-1" type="button">Previous</button>
+                  <button data-week="0" class="active" type="button">${rangeLabel}</button>
+                  <button data-week="1" type="button">Next</button>
+                </div>`
+              : `<div class="today-heading">
+                  <strong>Today</strong>
+                  <span>${formatDateFull(today)}</span>
+                </div>`
+          }
           <label class="staff-filter">
             <span>Staff</span>
             <select id="scheduleStaffFilter" aria-label="Schedule staff filter">
@@ -989,10 +1040,14 @@ function renderSchedule() {
         </div>
         ${
           isScheduleAdmin()
-            ? `<div class="schedule-actions" aria-label="Schedule actions">
-                <button class="ghost-button" data-action="copy-week" type="button">Copy week</button>
-                <button class="ghost-button" data-action="paste-week" type="button" ${copiedWeekCount ? "" : "disabled"}>Paste week</button>
-                <button class="ghost-button" data-action="publish-week" type="button" ${publishDisabled ? "disabled" : ""}>${state.publishingWeek ? "Publishing..." : "Publish week"}</button>
+            ? `<div class="schedule-actions ${state.scheduleView === "today" ? "today-actions" : ""}" aria-label="Schedule actions">
+                ${
+                  state.scheduleView === "week"
+                    ? `<button class="ghost-button" data-action="copy-week" type="button">Copy week</button>
+                       <button class="ghost-button" data-action="paste-week" type="button" ${copiedWeekCount ? "" : "disabled"}>Paste week</button>
+                       <button class="ghost-button" data-action="publish-week" type="button" ${publishDisabled ? "disabled" : ""}>${state.publishingWeek ? "Publishing..." : "Publish week"}</button>`
+                    : ""
+                }
                 <button class="primary-button" data-action="new-shift" type="button">New shift</button>
               </div>`
             : ""
@@ -1008,44 +1063,57 @@ function renderSchedule() {
           : ""
       }
       ${
-        state.copiedWeek && isScheduleAdmin()
+        state.scheduleView === "week" && state.copiedWeek && isScheduleAdmin()
           ? `<div class="copy-banner">
               Copied ${copiedWeekCount} shift${copiedWeekCount === 1 ? "" : "s"} from ${state.copiedWeek.rangeLabel}. Go to another week and choose Paste week.
             </div>`
           : ""
       }
       ${
-        isScheduleAdmin() && unpublishedCount
+        state.scheduleView === "week" && isScheduleAdmin() && unpublishedCount
           ? `<div class="copy-banner">${unpublishedCount} shift${unpublishedCount === 1 ? "" : "s"} not yet published to employees.</div>`
           : ""
       }
 
-      <div class="week-grid">
-        ${days
-          .map((day) => {
-            const key = toDateKey(day);
-            const dayShifts = shiftsForDate(key);
-            return `
-              <section class="day-column ${key === toDateKey(new Date()) ? "today" : ""}">
+      ${
+        state.scheduleView === "today"
+          ? `<div class="today-schedule-list">
+              <section class="day-column today today-only">
                 <div class="day-head">
                   <div>
-                    <strong>${formatWeekday(day)}</strong>
-                    <span>${formatDateShort(day)}</span>
+                    <strong>${formatWeekday(today)}</strong>
+                    <span>${formatDateShort(today)}</span>
                   </div>
-                  ${state.copiedShift && isScheduleAdmin() ? `<button class="mini-button" data-paste-shift-date="${key}" type="button">Paste</button>` : ""}
+                  ${state.copiedShift && isScheduleAdmin() ? `<button class="mini-button" data-paste-shift-date="${todayKey}" type="button">Paste</button>` : ""}
                 </div>
                 <div class="day-shifts">
-                  ${
-                    dayShifts.length
-                      ? dayShifts.map(renderScheduleShift).join("")
-                      : `<div class="empty-state">Open day</div>`
-                  }
+                  ${todayShifts.length ? todayShifts.map(renderScheduleShift).join("") : `<div class="empty-state">No shifts today</div>`}
                 </div>
               </section>
-            `;
-          })
-          .join("")}
-      </div>
+            </div>`
+          : `<div class="week-grid">
+              ${days
+                .map((day) => {
+                  const key = toDateKey(day);
+                  const dayShifts = shiftsForDate(key);
+                  return `
+                    <section class="day-column ${key === todayKey ? "today" : ""}">
+                      <div class="day-head">
+                        <div>
+                          <strong>${formatWeekday(day)}</strong>
+                          <span>${formatDateShort(day)}</span>
+                        </div>
+                        ${state.copiedShift && isScheduleAdmin() ? `<button class="mini-button" data-paste-shift-date="${key}" type="button">Paste</button>` : ""}
+                      </div>
+                      <div class="day-shifts">
+                        ${dayShifts.length ? dayShifts.map(renderScheduleShift).join("") : `<div class="empty-state">Open day</div>`}
+                      </div>
+                    </section>
+                  `;
+                })
+                .join("")}
+            </div>`
+      }
     </div>
   `;
 }
