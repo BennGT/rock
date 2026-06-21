@@ -224,7 +224,7 @@ function dataForUser(data, user) {
         nextOfKinPhone: "",
       };
     }),
-    shifts: Array.isArray(data.shifts) ? data.shifts.filter((shift) => manager || shift.published) : [],
+    shifts: Array.isArray(data.shifts) ? data.shifts.filter((shift) => shift.published) : [],
     messages: Array.isArray(data.messages)
       ? data.messages.filter((message) => !Array.isArray(message.hiddenForUserIds) || !message.hiddenForUserIds.includes(user.id))
       : [],

@@ -3691,7 +3691,7 @@ function weekShifts() {
 }
 
 function canSeeShift(shift) {
-  if (isAdmin()) return true;
+  if (isOwnerAdmin()) return true;
   return shift.published;
 }
 
