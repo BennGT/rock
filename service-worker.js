@@ -1,4 +1,4 @@
-const cacheName = "sherif-app-v59";
+const cacheName = "sherif-app-v60";
 const appShell = [
   "./",
   "./index.html",

@@ -1608,11 +1608,12 @@ function renderScheduleShift(shift) {
   const employee = findEmployee(shift.employeeId);
   const className = shift.status.toLowerCase();
   const colors = employeeShiftColors(employee);
+  const scheduleStatus = !shift.published ? statusPill("Unpublished") : shift.status === "Confirmed" ? "" : statusPill(shift.status);
   return `
     <article class="schedule-shift ${className}" style="--employee-color: ${colors[0]}; --employee-soft: ${softColor(colors[0])}; --shift-color-1: ${colors[0]}; --shift-color-2: ${colors[1]}; --shift-color-3: ${colors[2]}">
       <div class="schedule-shift-head">
         <strong>${shift.start} to ${shift.end}</strong>
-        ${shift.published ? statusPill(shift.status) : statusPill("Unpublished")}
+        ${scheduleStatus}
       </div>
       <div class="schedule-person">
         ${renderAvatar(employee, "small-avatar")}
