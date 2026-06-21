@@ -1,4 +1,4 @@
-const cacheName = "sherif-app-v55";
+const cacheName = "sherif-app-v56";
 const appShell = [
   "./",
   "./index.html",
@@ -6,6 +6,7 @@ const appShell = [
   "./app.js",
   "./manifest.webmanifest",
   "./assets/rnw-logo.png",
+  "./assets/notification-bell.png",
   "./assets/marshal-icon-192.png",
   "./assets/marshal-icon-512.png",
 ];

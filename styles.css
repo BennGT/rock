@@ -353,8 +353,8 @@ button {
   position: relative;
   margin-left: auto;
   flex: 0 0 auto;
-  width: 44px;
-  min-height: 40px;
+  width: 48px;
+  min-height: 44px;
   display: inline-grid;
   place-items: center;
   border: 1px solid var(--line);
@@ -362,41 +362,15 @@ button {
   padding: 0;
   background: var(--surface);
   color: var(--ink);
+  overflow: visible;
 }
 
-.bell-shape {
-  position: relative;
-  width: 18px;
-  height: 18px;
+.notification-bell img {
+  width: 34px;
+  height: 34px;
   display: block;
-  border: 2px solid currentColor;
-  border-bottom: 0;
-  border-radius: 12px 12px 5px 5px;
-}
-
-.bell-shape::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: -5px;
-  width: 6px;
-  height: 5px;
-  border-radius: 999px 999px 0 0;
-  border: 2px solid currentColor;
-  border-bottom: 0;
-  transform: translateX(-50%);
-}
-
-.bell-shape::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  bottom: -5px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  transform: translateX(-50%);
+  border-radius: 6px;
+  object-fit: cover;
 }
 
 .notification-bell .notification-badge {
